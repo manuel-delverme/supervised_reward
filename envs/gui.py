@@ -15,10 +15,17 @@ class GUI(object):
     _HEALTH_ICON = 'H'
     _PLAYER_ICON = "P"
 
-    def __init__(self, size, square_size=50):
-        self.square_size = square_size
+    _icon = {
+        _LAND_ICON: _GROUND_RESOURCE,
+        _BANDIT_ICON: _BANDIT_RESOURCE,
+        _HEALTH_ICON: _HEALTH_RESOURCE,
+        _PLAYER_ICON: _PLAYER_RESOURCE,
+    }
+
+    def __init__(self, size, tile_size=50):
+        self.tile_size = tile_size
         self.size = size  # Change this value to your needs!(12 max)
-        self.width, self.height = self.size * self.square_size, self.size * self.square_size
+        self.width, self.height = self.size * self.tile_size, self.size * self.tile_size
         pygame.init()
         self.screen = pygame.display.set_mode((self.width, self.height))
 
@@ -106,43 +113,36 @@ class GUI(object):
         error_message = em
         return who
 
-    def print_board(self):
+    def print_board(self, player_state, terminal_states, mode="graphical"):
         # Change the contents of the icon dictionary to print the correct graphics..
         # Print_board will translate the 2d array icon board(playerboard) into a x*y graphical board.
         # Vars
         # global icons, error_message
+        agent_x =
         x = 0
         y = 0
-        size = self.square_size
-        icon = {
-            self._LAND_ICON: self._GROUND_RESOURCE,
-            self._BANDIT_ICON: self._BANDIT_RESOURCE,
-            self._HEALTH_ICON: self._HEALTH_RESOURCE,
-            self._PLAYER_ICON: self._PLAYER_RESOURCE,
-        }
-        self.clear()
-        # Text board printer
-        for row in self.movable_layer[:]:
-            for j in range(1):
-                print(" ".join(row))
-        # Graphical board printer(Left to right, row by row)
-        for row in self.movable_layer:
-            cout = 0
-            x = 0
-            for square in row:
-                cout += 1
-                try:
-                    img = pygame.image.load(icon[square])
-                except Exception as e:
-                    img = pygame.image.load(self._GROUND_RESOURCE)
-                    print("image failed", square)
-                self.screen.blit(img, (x, y))
-                if x < self.width:
-                    x += size
-                else:
-                    x = 0
-            y += size
-        pygame.display.update()
+        size = self.tile_size
+        if mode == "ascii":
+            self.clear()
+            # Text board printer
+            for row in self.movable_layer[:]:
+                    print(" ".join(row))
+        else:
+            # Graphical board printer(Left to right, row by row)
+            for row in self.movable_layer:
+                cout = 0
+                x = 0
+                for square in row:
+                    cout += 1
+                    img = pygame.image.load(self._icon[square])
+                    img = pygame.transform.scale(img, (self.tile_size, self.tile_size))
+                    self.screen.blit(img, (x, y))
+                    if x < self.width:
+                        x += size
+                    else:
+                        x = 0
+                y += size
+            pygame.display.update()
 
 
 if __name__ == "__main__":

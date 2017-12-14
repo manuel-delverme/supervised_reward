@@ -24,13 +24,13 @@ class GridWorld(discrete.DiscreteEnv):
         grid = np.arange(state_size).reshape((height, width))
         it = np.nditer(grid, flags=['multi_index'])
 
-        goal_state_idxs = (0, state_size - 1)
+        self.terminal_states = (0, state_size - 1)
         while not it.finished:
             state_idx = it.iterindex
             y, x = it.multi_index
 
             transition[state_idx] = {a: [] for a in range(action_size)}
-            terminal = state_idx in goal_state_idxs
+            terminal = state_idx in self.terminal_states
             reward = 0.0 if terminal else -1.0
 
             if terminal:
@@ -45,10 +45,10 @@ class GridWorld(discrete.DiscreteEnv):
                 next_state_right = state_idx if x == (width - 1) else state_idx + 1
                 next_state_down = state_idx if y == (height - 1) else state_idx + width
                 next_state_left = state_idx if x == 0 else state_idx - 1
-                transition[state_idx][UP] = [(1.0, next_state_up, reward, next_state_up in goal_state_idxs)]
-                transition[state_idx][RIGHT] = [(1.0, next_state_right, reward, next_state_right in goal_state_idxs)]
-                transition[state_idx][DOWN] = [(1.0, next_state_down, reward, next_state_down in goal_state_idxs)]
-                transition[state_idx][LEFT] = [(1.0, next_state_left, reward, next_state_left in goal_state_idxs)]
+                transition[state_idx][UP] = [(1.0, next_state_up, reward, next_state_up in self.terminal_states)]
+                transition[state_idx][RIGHT] = [(1.0, next_state_right, reward, next_state_right in self.terminal_states)]
+                transition[state_idx][DOWN] = [(1.0, next_state_down, reward, next_state_down in self.terminal_states)]
+                transition[state_idx][LEFT] = [(1.0, next_state_left, reward, next_state_left in self.terminal_states)]
 
             it.iternext()
 
@@ -64,37 +64,7 @@ class GridWorld(discrete.DiscreteEnv):
     def _render(self, mode='human', close=False):
         if close:
             return
-        # self.gui.update()
-        self.gui.print_board()
-
-        outfile = io.StringIO() if mode == 'ansi' else sys.stdout
-
-        grid = np.arange(self.nS).reshape(self.shape)
-        it = np.nditer(grid, flags=['multi_index'])
-        print("-" * self.shape[1] * 3)
-        while not it.finished:
-            s = it.iterindex
-            y, x = it.multi_index
-
-            if self.s == s:
-                output = " x "
-            elif s == 0 or s == self.nS - 1:
-                output = " T "
-            else:
-                output = " o "
-
-            if x == 0:
-                output = output.lstrip()
-            if x == self.shape[1] - 1:
-                output = output.rstrip()
-
-            outfile.write(output)
-
-            if x == self.shape[1] - 1:
-                outfile.write("\n")
-
-            it.iternext()
-        print("-" * self.shape[1] * 3)
+        self.gui.print_board(self.s, self.terminal_states)
 
 
 if __name__ == "__main__":
