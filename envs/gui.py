@@ -22,9 +22,15 @@ class GUI(object):
         _PLAYER_ICON: _PLAYER_RESOURCE,
     }
 
-    def __init__(self, size, tile_size=50):
+    def __init__(self, size, grid, tile_size=50):
         self.tile_size = tile_size
         self.size = size  # Change this value to your needs!(12 max)
+
+        self.icon = {}
+        for key, val in self._icon.items():
+            img = pygame.image.load(val)
+            self.icon[key] = pygame.transform.scale(img, (self.tile_size, self.tile_size))
+
         self.width, self.height = self.size * self.tile_size, self.size * self.tile_size
         pygame.init()
         self.screen = pygame.display.set_mode((self.width, self.height))
@@ -40,6 +46,11 @@ class GUI(object):
         self.background_layer = []  # Static objects such as buttons, ground and walls.
         # self.memory_board = []  # Counts the steps each block has recieved for limited use items such as health pacs
         self.movable_layer = []  # Front-end. Move your player around this board without affecting static objects.
+
+        self.idx_to_xy = {}
+        for row_idx, row in enumerate(grid):
+            for col_idx, state in enumerate(row):
+                self.idx_to_xy[state] = (col_idx, row_idx)
 
         # Map array writer
         for click in range(self.size):
@@ -118,10 +129,6 @@ class GUI(object):
         # Print_board will translate the 2d array icon board(playerboard) into a x*y graphical board.
         # Vars
         # global icons, error_message
-        agent_x =
-        x = 0
-        y = 0
-        size = self.tile_size
         if mode == "ascii":
             self.clear()
             # Text board printer
@@ -129,19 +136,15 @@ class GUI(object):
                     print(" ".join(row))
         else:
             # Graphical board printer(Left to right, row by row)
-            for row in self.movable_layer:
-                cout = 0
-                x = 0
-                for square in row:
-                    cout += 1
-                    img = pygame.image.load(self._icon[square])
-                    img = pygame.transform.scale(img, (self.tile_size, self.tile_size))
-                    self.screen.blit(img, (x, y))
-                    if x < self.width:
-                        x += size
-                    else:
-                        x = 0
-                y += size
+            for idx, (x, y) in self.idx_to_xy.items():
+                if idx == player_state:
+                    square = self._PLAYER_ICON
+                elif idx in terminal_states:
+                    square = self._HEALTH_ICON
+                else:
+                    square = self._LAND_ICON
+
+                self.screen.blit(self.icon[square], (x * self.tile_size, y * self.tile_size))
             pygame.display.update()
 
 

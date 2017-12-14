@@ -1,4 +1,5 @@
 import numpy as np
+import random
 import sys
 from gym.envs.toy_text import discrete
 import io
@@ -21,8 +22,8 @@ class GridWorld(discrete.DiscreteEnv):
         state_size = height * width
 
         transition = {}
-        grid = np.arange(state_size).reshape((height, width))
-        it = np.nditer(grid, flags=['multi_index'])
+        self.grid = np.arange(state_size).reshape((height, width))
+        it = np.nditer(self.grid, flags=['multi_index'])
 
         self.terminal_states = (0, state_size - 1)
         while not it.finished:
@@ -59,7 +60,7 @@ class GridWorld(discrete.DiscreteEnv):
         # This should not be used in any model-free learning algorithm
         self.transition = transition
         super(GridWorld, self).__init__(state_size, action_size, transition, isd)
-        self.gui = gui.GUI(size)
+        self.gui = gui.GUI(size, self.grid)
 
     def _render(self, mode='human', close=False):
         if close:
@@ -71,5 +72,5 @@ if __name__ == "__main__":
     env = GridWorld()
     terminal = False
     while not terminal:
-        state, reward, terminal, info = env.step(1)
+        state, reward, terminal, info = env.step(random.choice(range(4)))
         env.render(mode="ansi")
