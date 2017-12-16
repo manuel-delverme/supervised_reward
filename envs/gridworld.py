@@ -93,7 +93,7 @@ class GridWorld(discrete.DiscreteEnv):
     def plot_goals(self, goals):
         if self.gui is None:
             self.gui = envs.gui.GUI(self.grid)
-        self.gui.print_board(self.s, self.terminal_states, goals=[g[1] for g in goals])
+        self.gui.print_board(self.s, self.terminal_states, goals=goals)
 
 if __name__ == "__main__":
     env = GridWorld()

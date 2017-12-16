@@ -25,8 +25,9 @@ class Regressor(object):
 
 
 class GoalSelector(object):
-    def __init__(self):
+    def __init__(self, num_goals):
         self.threshold = 1
+        self.num_goals = num_goals
 
     def select_goals(self, mdp, reward_function):
         # pol_iter = learners.policyIteration(env=mdp, surrogate_reward=reward_function)
@@ -35,7 +36,8 @@ class GoalSelector(object):
             alpha=0.1,
             epsilon=0.1,
             gamma=1,  # 0.9,
-            training_episodes_nr=25,
+            training_episodes_nr=100,
+            num_goals=self.num_goals,
             goal_criterion=self.make_goal_criterion(self.threshold)
         )
         return goals
@@ -63,10 +65,10 @@ def main():
     # env = envs.gridworld.GridWorld()
     mdp_distribution = EnvGenerator(envs.gridworld.GridWorld, invariants={'size': 12})
     regressor = Regressor(env_distr=mdp_distribution)
-    goal_selector = GoalSelector()
-    TRAINING_SIZE = 10
-    NR_EPOCHS = 10
-    TEST_SIZE = 3
+    goal_selector = GoalSelector(num_goals=3)
+    TRAINING_SIZE = 5
+    NR_EPOCHS = 5
+    TEST_SIZE = 1
 
     fitness = None
     for epoch in range(NR_EPOCHS):
@@ -75,22 +77,34 @@ def main():
             if idx > TRAINING_SIZE:
                 break
             goals = goal_selector.select_goals(mdp, reward_function)
+            goals = [idx for score, idx in goals]
+            print("GOALS:", goals)
             mdp.plot_goals(goals)
             options = []
             for goal in goals:
-                def surrogate_reward(state_idx):
-                    return 1 if goal[1] == state_idx else -1
-                pol_iter = learners.policy_iter.policyIteration(env=mdp, surrogate_reward=surrogate_reward)
-                v, pi = pol_iter.solvePolicyIteration()
-                options.append(pi)
+                print("generating policy for goal:", goal)
 
-        cum_cum_reward = 0
-        for idx, mdp in enumerate(mdp_distribution):
-            if idx > TEST_SIZE:
-                break
-            cum_reward = learners.qLearningWithOptions(env=mdp)
-        fitness = cum_cum_reward / TEST_SIZE
-        print(fitness)
+                def surrogate_reward(mdp):
+                    return 1 if goal == mdp.s else -1
+
+                skill = learners.policy_iter.policyIteration(env=mdp, surrogate_reward=surrogate_reward)
+                options.append(skill)
+
+            cum_cum_reward = 0
+            for idx, mdp in enumerate(mdp_distribution.gen_samples(training=True)):
+                if idx > TEST_SIZE:
+                    break
+                cum_cum_reward += learners.double_q.qLearningWithOptions(
+                    env=mdp,
+                    alpha=0.1,
+                    gamma=0.9,
+                    epsilon=0.1,
+                    maxLengthEp=100,
+                    nEpisodes=100,
+                    loadedOptions=options
+                )
+            fitness = cum_cum_reward / TEST_SIZE
+            print(fitness)
 
         # terminal = False
         # while not terminal:
