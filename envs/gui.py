@@ -5,26 +5,43 @@ import sys
 
 
 class GUI(object):
-    _GROUND_RESOURCE = 'resources/ground.jpg'
-    _BANDIT_RESOURCE = 'resources/bandit.jpg'
-    _HEALTH_RESOURCE = 'resources/health.jpg'
-    _PLAYER_RESOURCE = 'resources/player.jpg'
+    _GROUND_RESOURCE = 'envs/resources/ground.jpg'
+    _BANDIT_RESOURCE = 'envs/resources/bandit.jpg'
+    _HEALTH_RESOURCE = 'envs/resources/health.jpg'
+    _PLAYER_RESOURCE = 'envs/resources/player.jpg'
+    _UPARRORW_RESOURCE = 'envs/resources/arrow_up.jpg'
+    _DOWNARRORW_RESOURCE = 'envs/resources/arrow_down.jpg'
+    _LEFTARRORW_RESOURCE = 'envs/resources/arrow_left.jpg'
+    _RIGHTARRORW_RESOURCE = 'envs/resources/arrow_right.jpg'
 
     _LAND_ICON = ' '
     _BANDIT_ICON = 'B'
     _HEALTH_ICON = 'H'
     _PLAYER_ICON = "P"
+    _UPARRORW_ICON = "^"
+    _DOWNARRORW_ICON = "v"
+    _LEFTARRORW_ICON = "<"
+    _RIGHTARRORW_ICON = ">"
+
+    _UP = 0
+    _RIGHT = 1
+    _DOWN = 2
+    _LEFT = 3
 
     _icon = {
         _LAND_ICON: _GROUND_RESOURCE,
         _BANDIT_ICON: _BANDIT_RESOURCE,
         _HEALTH_ICON: _HEALTH_RESOURCE,
         _PLAYER_ICON: _PLAYER_RESOURCE,
+        _UPARRORW_ICON: _UPARRORW_RESOURCE,
+        _DOWNARRORW_ICON: _DOWNARRORW_RESOURCE,
+        _LEFTARRORW_ICON: _LEFTARRORW_RESOURCE,
+        _RIGHTARRORW_ICON: _RIGHTARRORW_RESOURCE,
     }
 
-    def __init__(self, size, grid, tile_size=50):
+    def __init__(self, grid, tile_size=50):
         self.tile_size = tile_size
-        self.size = size  # Change this value to your needs!(12 max)
+        self.size = grid.shape[0]
 
         self.icon = {}
         for key, val in self._icon.items():
@@ -59,8 +76,7 @@ class GUI(object):
             # self.memory_board.append([0] * self.size)
 
         # vars
-        error_message = ""
-        self.player_xy = [(size - 2), 0, 0]
+        self.player_xy = [(self.size - 2), 0, 0]
         self.movable_layer[self.player_xy[0]][self.player_xy[1]] = self._PLAYER_ICON
 
     def render_action(self, action):
@@ -124,7 +140,7 @@ class GUI(object):
         error_message = em
         return who
 
-    def print_board(self, player_state, terminal_states, mode="graphical"):
+    def print_board(self, player_state, terminal_states, mode="graphical", policy=None, goals=None):
         # Change the contents of the icon dictionary to print the correct graphics..
         # Print_board will translate the 2d array icon board(playerboard) into a x*y graphical board.
         # Vars
@@ -135,14 +151,29 @@ class GUI(object):
             for row in self.movable_layer[:]:
                     print(" ".join(row))
         else:
-            # Graphical board printer(Left to right, row by row)
             for idx, (x, y) in self.idx_to_xy.items():
-                if idx == player_state:
+                if policy is not None:
+                    if policy[idx] == self._UP:
+                        square = self._UPARRORW_ICON
+                    elif policy[idx] == self._DOWN:
+                        square = self._DOWNARRORW_ICON
+                    elif policy[idx] == self._LEFT:
+                        square = self._LEFTARRORW_ICON
+                    elif policy[idx] == self._RIGHT:
+                        square = self._RIGHTARRORW_ICON
+                    elif policy[idx] == -1:
+                        square = self._HEALTH_ICON
+                    else:
+                        raise ValueError("policy action {} undefined".format(policy[idx]))
+                elif idx == player_state:
                     square = self._PLAYER_ICON
                 elif idx in terminal_states:
-                    square = self._HEALTH_ICON
+                    square = self._BANDIT_ICON
                 else:
                     square = self._LAND_ICON
+
+                if goals is not None and idx in goals:
+                    square = self._HEALTH_ICON
 
                 self.screen.blit(self.icon[square], (x * self.tile_size, y * self.tile_size))
             pygame.display.update()
