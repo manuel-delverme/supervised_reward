@@ -31,8 +31,8 @@ class DoubleQLearning(object):
 
             while not terminal:
                 if epsilon > random.random():
-                    qTotal = self.Q1 + self.Q2
-                    action = np.argmax(qTotal[old_state, :])
+                    Q_total_s = self.Q1[old_state, :] + self.Q2[old_state, :]
+                    action = np.argmax(Q_total_s)
                 else:
                     action = random.randint(0, self.environment.action_space.n - 1)
 
@@ -92,6 +92,14 @@ def q_learning_with_options(env, alpha, gamma, epsilon, n_episodes, time_limit, 
     return cum_reward
 
 
+def is_skill(previous_action):
+    return isinstance(previous_action, np.ndarray)
+
+
+def is_terminal(skill, old_state):
+    return skill[old_state] == -1
+
+
 class QLearning:
     def __init__(self, alpha, gamma, epsilon, environment, options, time_limit):
         self.environment = environment
@@ -100,69 +108,65 @@ class QLearning:
         self.epsilon = epsilon
         self.options = options
         self.time_limit = time_limit
+        self.previous_action = None
         num_states = self.environment.observation_space.n
         self.num_primitive_actions = self.environment.action_space.n
-        self.Q1 = 0.00001 * np.random.rand(num_states, self.num_primitive_actions)
-        self.Q2 = 0.00001 * np.random.rand(num_states, self.num_primitive_actions)
+        self.Q1 = 0.00001 * np.random.rand(num_states, self.num_primitive_actions + len(options))
+        self.Q2 = 0.00001 * np.random.rand(num_states, self.num_primitive_actions + len(options))
+        self.action_list = list(range(self.num_primitive_actions)) + options
         for state in environment.terminal_states:
             self.Q1[state, :] = 0
             self.Q2[state, :] = 0
         self.environment = environment
 
-    def getIdFromPrimitiveActions(self, action):
-        for i in range(self.numPrimitiveActions):
-            if self.environment.getActionSet()[i] == action:
-                return i
-
-        return 'error'
-
-    def epsilon_greedy(self, F, s):
-        """ Epsilon-greedy function. F needs to be Q[s], so it consists of one value per action."""
-        if self.epsilon > random.random():
-            qTotal = self.Q1 + self.Q2
-            action = np.argmax(qTotal[old_state, :])
-        else:
-            action = random.randint(0, self.environment.action_space.n - 1)
-        return action
-
-    def get_primitive_action(self, s, a):
-        if a < self.num_primitive_actions:
-            return self.actionSet[a]
-        else:
-            idxOption = a - self.numPrimitiveActions
-            return self.optionsActionSet[idxOption][self.actionSet[a][s]]
-
     def learn_one_episode(self):
         timestep = 0
-        previous_action = -1
         cumulativeReward = 0
 
         old_state = self.environment.reset()
         terminal = False
         while not terminal and timestep < self.time_limit:
-            if not isinstance(previous_action, np.ndarray):
-                action = self.epsilon_greedy(self.Q1[old_state], old_state)
-            action = self.get_primitive_action(old_state, action)
+            action, primitive_action = self.pick_action(old_state)
 
-            if action == 'terminate':
-                action = self.epsilon_greedy(self.Q[old_state], old_state)
-                action = self.get_primitive_action(old_state, action)
-
-            previous_action = action
-            new_state, reward, terminal, info = self.environment.step(action)
-            # reward = self.environment.step(action)
+            new_state, reward, terminal, info = self.environment.step(primitive_action)
             cumulativeReward += reward
-            # sNext = self.environment.getCurrentState()
 
-            if self.toLearnUsingOnlyPrimitiveActions:
-                action = self.getIdFromPrimitiveActions(action)
-            self.Q[old_state][action] = self.Q[old_state][action] + self.alpha * (
-                reward + self.gamma * np.max(self.Q[new_state]) - self.Q[old_state][action])
+            if random.random() > 0.5:
+                Q, q = self.Q1, self.Q2
+            else:
+                Q, q = self.Q2, self.Q1
+
+            best_future_q = np.max(Q[new_state, :])
+            old_Q = Q[old_state, action]
+            delta_Q = self.alpha * (reward + (self.gamma * best_future_q) - old_Q)
+
+            # update the value in self.Q1 or self.Q2 by pointer
+            old_Q += delta_Q
 
             old_state = new_state
             timestep += 1
-        cumulativeReward += (timestep_limit - timestep) * reward
+        cumulativeReward += (self.time_limit - timestep) * reward
         return cumulativeReward
+
+    def pick_action(self, old_state):
+        if is_skill(self.previous_action) and not is_terminal(self.previous_action, old_state):
+            primitive_action = self.previous_action[old_state]
+        else:
+            action = None
+            while action is not None and not is_terminal(action, old_state):  # TODO: refactor
+                if self.epsilon > random.random():
+                    Q_total_s = self.Q1[old_state, :] + self.Q2[old_state, :]
+                    action = np.argmax(Q_total_s)
+                else:
+                    action = random.choice(self.action_list)
+
+                if is_skill(action):
+                    primitive_action = action[old_state]
+                else:
+                    primitive_action = action
+
+            self.previous_action = action
+        return primitive_action
 
     def evaluateOneEpisode(self, eps=None, render=False):
         """Evaluate Q-learning for one episode."""
@@ -182,7 +186,9 @@ class QLearning:
 
             if action == 'terminate':
                 action = self.epsilon_greedy(self.Q[old_state], old_state, epsilon=eps)
-                action = self.get_primitive_action(old_state, action)
+                if isinstance(action, np.ndarray):
+                    action = action[old_state]
+                return action
 
             previous_action = action
             new_state, reward, terminal, info = self.environment.step(action)

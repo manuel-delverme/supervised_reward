@@ -9,6 +9,7 @@ UP = 0
 RIGHT = 1
 DOWN = 2
 LEFT = 3
+TERMINAL = -1
 
 
 class GridWorld(discrete.DiscreteEnv):
