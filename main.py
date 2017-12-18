@@ -1,28 +1,13 @@
 import sys
+import disk_utils
+import collections
 import learners.double_q
 import learners.policy_iter
+import controller.meta_controller
 import numpy as np
 # from learning import Learning
 
 import envs.gridworld
-
-
-class Regressor(object):
-    def __init__(self, env_distr):
-        self.state_size = np.square(env_distr.invariants['size'])
-
-    def get_reward_function(self, fitness):
-        prediction = np.random.rand(self.state_size)
-
-        # prediction = -np.ones(self.state_size)
-        # prediction[4] = 1
-
-        def reward_function(mdp):
-            # return np.dot(mdp.state, prediction)
-            return prediction[mdp.agent_position_idx]
-
-        return reward_function
-
 
 class GoalSelector(object):
     def __init__(self, num_goals):
@@ -62,54 +47,80 @@ class EnvGenerator(object):
 
 
 def main():
+    TRAINING_SIZE = 1
+    NR_EPOCHS = 1000
+    TEST_SIZE = 1
+    NUM_GOALS = 2
+    POPULATION_SIZE = 4
+    history = collections.deque(maxlen=100)
+
     # env = envs.gridworld.GridWorld()
     mdp_distribution = EnvGenerator(envs.gridworld.GridWorld, invariants={'size': 12})
-    regressor = Regressor(env_distr=mdp_distribution)
-    goal_selector = GoalSelector(num_goals=3)
-    TRAINING_SIZE = 5
-    NR_EPOCHS = 5
-    TEST_SIZE = 1
+    regressor = controller.meta_controller.EvolutionaryAlgorithm(
+        env_distr=mdp_distribution,
+        population_size=POPULATION_SIZE
+    )
+    # regressor.stuff()
+    goal_selector = GoalSelector(num_goals=NUM_GOALS)
 
     fitness = None
+    reward_function_gen = regressor.get_reward_function()
     for epoch in range(NR_EPOCHS):
-        reward_function = regressor.get_reward_function(fitness)
-        for idx, mdp in enumerate(mdp_distribution.gen_samples(training=True)):
-            if idx > TRAINING_SIZE:
+        for eval_step, mdp in enumerate(mdp_distribution.gen_samples(training=True)):
+            reward_function = reward_function_gen.send(fitness)
+            if eval_step > TRAINING_SIZE:
                 break
-            goals = goal_selector.select_goals(mdp, reward_function)
-            goals = [idx for score, idx in goals]
-            print("GOALS:", goals)
-            mdp.plot_goals(goals)
-            options = []
-            for goal in goals:
-                print("generating policy for goal:", goal)
+            goals = select_goals(goal_selector, mdp, reward_function)
 
-                def surrogate_reward(mdp):
-                    return 1 if goal == mdp.s else -1
+            options = learn_skills(goals, mdp)
 
-                skill = learners.policy_iter.policyIteration(env=mdp, surrogate_reward=surrogate_reward)
-                options.append(skill)
-
+            print("testing goals")
             cum_cum_reward = 0
-            for idx, mdp in enumerate(mdp_distribution.gen_samples(training=True)):
-                if idx > TEST_SIZE:
+            for eval_step, mdp in enumerate(mdp_distribution.gen_samples(training=True)):
+                if eval_step >= TEST_SIZE:
                     break
-                cum_cum_reward += learners.double_q.qLearningWithOptions(
+                cum_cum_reward += learners.double_q.q_learning_with_options(
                     env=mdp,
-                    alpha=0.1,
-                    gamma=0.9,
+                    alpha=0.5,
+                    gamma=0.99,
                     epsilon=0.1,
-                    maxLengthEp=100,
-                    nEpisodes=100,
-                    loadedOptions=options
+                    time_limit=100,
+                    n_episodes=100,
+                    options=options
                 )
             fitness = cum_cum_reward / TEST_SIZE
-            print(fitness)
+            history.append(fitness)
+            print(history)
 
         # terminal = False
         # while not terminal:
         #     state, reward, terminal, info = env.step(1)
         #     env.render(mode="ansi")
+
+
+def select_goals(goal_selector, mdp, reward_function):
+    return [1, 31]
+    print("selecting goals")
+    goals = goal_selector.select_goals(mdp, reward_function)
+    goals = [idx for score, idx in goals]
+    print("GOALS:", goals)
+    mdp.plot_goals(goals)
+    return goals
+
+
+@disk_utils.disk_cache
+def learn_skills(goals, mdp):
+    print("learning goals")
+    options = []
+    for goal in goals:
+        print("generating policy for goal:", goal)
+
+        def surrogate_reward(mdp):
+            return 1 if goal == mdp.s else -1
+
+        skill = learners.policy_iter.policyIteration(env=mdp, surrogate_reward=surrogate_reward)
+        options.append(skill)
+    return options
 
 
 if __name__ == "__main__":
