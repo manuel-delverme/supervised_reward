@@ -10,7 +10,7 @@ class TDErrorGoals(object):
         # return [1, 31]
         # pol_iter = learners.policyIteration(env=mdp, surrogate_reward=reward_function)
         learner = learners.double_q.DoubleQLearning(env=mdp, surrogate_reward=reward_function)
-        print("selecting goals")
+        # print("selecting goals")
         options, cum_reward = learner.learn(
             training_steps=training_steps,
             goal_criterion=self.make_goal_criterion(self.threshold)

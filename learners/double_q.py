@@ -1,13 +1,12 @@
 import numpy as np
 import disk_utils
 import heapq
-import tqdm
 import random
 import learners.policy_iter
 
 
 class DoubleQLearning(object):
-    def __init__(self, env, epsilon=0.1, gamma=0.99, alpha=0.1, surrogate_reward=None):
+    def __init__(self, env, options=None, epsilon=0.1, gamma=0.99, alpha=0.1, surrogate_reward=None):
         self.epsilon = epsilon
         self.gamma = gamma
         self.alpha = alpha
@@ -22,6 +21,8 @@ class DoubleQLearning(object):
         self.environment = env
         self.surrogate_reward = surrogate_reward
         self.available_actions = list(range(0, self.environment.action_space.n - 1))
+        if options is not None:
+            self.available_actions.extend(options)
 
     @staticmethod
     def null_criterion(*args, **kwargs):
@@ -32,6 +33,7 @@ class DoubleQLearning(object):
             primitive_action = self.previous_action[old_state]
         else:
             if self.epsilon > random.random():
+
                 Q_total_s = self.Q1[old_state, :] + self.Q2[old_state, :]
                 action = np.argmax(Q_total_s)
             else:
@@ -47,13 +49,13 @@ class DoubleQLearning(object):
 
     def learn(self, training_steps, goal_criterion=None):
         # returnSum = 0.0
-        print("[double_q] learn")
-        options = []
+        # print("[double_q] learn")
+        discovered_options = []
         cumulative_reward = 0
 
         old_state = self.environment.reset()
         time_steps_under_option = 0
-        for episode_num in tqdm.tqdm(range(training_steps)):
+        for episode_num in range(training_steps):
             action, primitive_action = self.pick_action(old_state)
             new_state, reward, terminal, info = self.environment.step(primitive_action)
 
@@ -72,17 +74,17 @@ class DoubleQLearning(object):
                 best_future_q = np.max(Q[new_state, :])
                 old_Q = Q[old_state, action]
                 k = 1 + time_steps_under_option
-                delta_Q = self.alpha * (reward + ((self.gamma ** k) * best_future_q) - old_Q)
+                delta_Q = reward + ((self.gamma ** k) * best_future_q) - old_Q
 
                 # update the value in self.Q1 or self.Q2 by pointer
-                old_Q += delta_Q
+                old_Q += self.alpha * delta_Q
 
                 # TODO: or new state?
-                if goal_criterion(old_state, delta_Q):
-                    options.append(learn_option(old_state, self.environment))
+                if goal_criterion is not None and goal_criterion(old_state, delta_Q):
+                    discovered_options.append(learn_option(old_state, self.environment))
                 old_state = new_state
                 # cumulative_reward += (self.time_limit - timestep) * reward
-        return options, cumulative_reward
+        return discovered_options, cumulative_reward
 
 
 def q_learning_with_options(env, alpha, gamma, epsilon, n_episodes, time_limit, options):
@@ -98,7 +100,7 @@ def q_learning_with_options(env, alpha, gamma, epsilon, n_episodes, time_limit, 
 
     # cum_reward = 0
     # returns_learn = np.zeros(len(options), n_episodes)
-    for episode_idx in tqdm.tqdm(range(n_episodes)):
+    for episode_idx in range(n_episodes):
         _ = learner.learn_one_episode()
     cum_reward = learner.evaluateOneEpisode(render=True)
     # learner.evaluateOneEpisode(render=True)
@@ -205,7 +207,7 @@ class QLearning:
 
 @disk_utils.disk_cache
 def learn_option(goal, mdp):
-    print("generating policy for goal:", goal)
+    # print("generating policy for goal:", goal)
 
     def surrogate_reward(_mdp):
         return 1 if goal == _mdp.agent_position_idx else -1

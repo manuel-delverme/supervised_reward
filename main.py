@@ -1,4 +1,5 @@
 import sys
+import tqdm
 import collections
 import learners.double_q
 import learners.policy_iter
@@ -16,7 +17,7 @@ def main():
     NR_EPOCHS = 1000
     TEST_SIZE = 1
     NUM_GOALS = 2
-    POPULATION_SIZE = 4
+    POPULATION_SIZE = 10
 
     history = collections.deque(maxlen=15)
 
@@ -27,34 +28,35 @@ def main():
 
     fitness = None
     reward_function_gen = regressor.get_reward_function()
-    for epoch in range(NR_EPOCHS):
-        for eval_step, mdp in enumerate(mdp_distribution.gen_samples(training=True)):
+    progress_bar = tqdm.tqdm()
+    for training_epoch in range(NR_EPOCHS):
+        progress_bar.update(1)
+        if training_epoch > TRAINING_SIZE:
+            break
+
+        for mdp in mdp_distribution.gen_samples(training=True):
+            # get one MDP
+
+            # estimate a reward fn
             intrinsic_reward_function = reward_function_gen.send(fitness)
-            if eval_step > TRAINING_SIZE:
-                break
-            options = option_generator.generate_options(
-                mdp,
-                intrinsic_reward_function,
-                training_steps=1000
-            )
-            print("found {} options".format(len(options)))
-            print("testing goals")
+
+            # turn reward into options
+            options = option_generator.generate_options(mdp, intrinsic_reward_function, training_steps=1000)
+
+            progress_bar.set_description("found: {} options\n history: {}\n pop:\n{}\n".format(
+                len(options),
+                history,
+                "\n".join([str(el[0]) for el in regressor.population])
+            ))
             cum_cum_reward = 0
-            for eval_step, mdp in enumerate(mdp_distribution.gen_samples(training=True)):
-                if eval_step >= TEST_SIZE:
-                    break
-                cum_cum_reward += learners.double_q.q_learning_with_options(
-                    env=mdp,
-                    alpha=0.5,
-                    gamma=0.99,
-                    epsilon=0.1,
-                    time_limit=100,
-                    n_episodes=100,
-                    options=options
-                )
+
+            # eval options
+            for eval_step, mdp in zip(range(TEST_SIZE), mdp_distribution.gen_samples(training=False)):
+                learner = learners.double_q.DoubleQLearning(env=mdp, options=options)
+                _, cum_reward = learner.learn(training_steps=1000)
+                cum_cum_reward += cum_reward
             fitness = cum_cum_reward / TEST_SIZE
             history.append(fitness)
-            print(history)
 
             # terminal = False
             # while not terminal:
