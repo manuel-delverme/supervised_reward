@@ -66,7 +66,7 @@ class EvolutionaryAlgorithm(object):
 
         return pop
 
-    def get_reward_function(self):
+    def get_reward_function(self, feature_control=False):
         while True:
             for idx, individual in enumerate(list(self.population)):
                 def surrogate_reward(mdp):
@@ -80,8 +80,6 @@ class EvolutionaryAlgorithm(object):
                     # return np.dot(mdp.state, individual[0])
                     # special case for this gridworld?
                     reward = reward_vec[mdp.agent_position_idx]
-                    for state_idx in mdp.terminal_states:
-                        reward -= reward_vec[state_idx]
                     return reward
 
                 self.population[idx][1] = yield surrogate_reward

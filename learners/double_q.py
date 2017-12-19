@@ -1,75 +1,88 @@
 import numpy as np
+import disk_utils
 import heapq
 import tqdm
 import random
+import learners.policy_iter
 
 
 class DoubleQLearning(object):
-    def __init__(self, env, surrogate_reward=None):
+    def __init__(self, env, epsilon=0.1, gamma=0.99, alpha=0.1, surrogate_reward=None):
+        self.epsilon = epsilon
+        self.gamma = gamma
+        self.alpha = alpha
+
         self.Q1 = 0.00001 * np.random.rand(env.observation_space.n, env.action_space.n)
         self.Q2 = 0.00001 * np.random.rand(env.observation_space.n, env.action_space.n)
-        for state in env.terminal_states:
-            self.Q1[state, :] = 0
-            self.Q2[state, :] = 0
+        if hasattr(env, 'terminal_states'):
+            for state in env.terminal_states:
+                self.Q1[state, :] = 0
+                self.Q2[state, :] = 0
+        self.previous_action = None
         self.environment = env
         self.surrogate_reward = surrogate_reward
+        self.available_actions = list(range(0, self.environment.action_space.n - 1))
 
     @staticmethod
     def null_criterion(*args, **kwargs):
         return False
 
-    def learn(self, alpha, gamma, epsilon, training_episodes_nr, num_goals=10, goal_criterion=null_criterion):
+    def pick_action(self, old_state):
+        if is_skill(self.previous_action) and not is_terminate_option(self.previous_action, old_state):
+            primitive_action = self.previous_action[old_state]
+        else:
+            if self.epsilon > random.random():
+                Q_total_s = self.Q1[old_state, :] + self.Q2[old_state, :]
+                action = np.argmax(Q_total_s)
+            else:
+                action = random.choice(self.available_actions)
+
+            if is_skill(action):
+                primitive_action = action[old_state]
+            else:
+                primitive_action = action
+
+            self.previous_action = action
+        return action, primitive_action
+
+    def learn(self, training_steps, goal_criterion=None):
         # returnSum = 0.0
         print("[double_q] learn")
-        goals = []
-        goal_states = set()
-        for episode_num in tqdm.tqdm(range(training_episodes_nr)):
-            old_state = self.environment.reset()
-            terminal = False
-            # if self.surrogate_reward is not None:
-            #     reward = self.surrogate_reward(self.environment)
+        options = []
+        cumulative_reward = 0
 
-            while not terminal:
-                if epsilon > random.random():
-                    Q_total_s = self.Q1[old_state, :] + self.Q2[old_state, :]
-                    action = np.argmax(Q_total_s)
-                else:
-                    action = random.randint(0, self.environment.action_space.n - 1)
+        old_state = self.environment.reset()
+        time_steps_under_option = 0
+        for episode_num in tqdm.tqdm(range(training_steps)):
+            action, primitive_action = self.pick_action(old_state)
+            new_state, reward, terminal, info = self.environment.step(primitive_action)
 
-                new_state, reward, terminal, info = self.environment.step(action)
-                if self.surrogate_reward is not None:
-                    reward = self.surrogate_reward(self.environment)
+            if self.surrogate_reward is not None:
+                reward = self.surrogate_reward(self.environment)
+            cumulative_reward += reward
 
+            if is_skill(action):
+                time_steps_under_option += 1
+            else:
                 if random.random() > 0.5:
                     Q, q = self.Q1, self.Q2
                 else:
                     Q, q = self.Q2, self.Q1
-                best_future_act = np.argmax(Q[new_state, :])
+
+                best_future_q = np.max(Q[new_state, :])
                 old_Q = Q[old_state, action]
-                delta_Q = alpha * (reward + (gamma * q[new_state, best_future_act]) - old_Q)
+                k = 1 + time_steps_under_option
+                delta_Q = self.alpha * (reward + ((self.gamma ** k) * best_future_q) - old_Q)
+
+                # update the value in self.Q1 or self.Q2 by pointer
                 old_Q += delta_Q
 
-                # if goal_criterion(old_state, delta_Q):
-                #     goals.append(old_state)
                 # TODO: or new state?
-                if len(goals) < num_goals and new_state not in goal_states:
-                    goal_states.add(new_state)
-                    heapq.heappush(goals, (delta_Q, new_state))
-                elif delta_Q > goals[0][0]:
-                    if new_state not in goal_states:
-                        # print("replacing", goals[0], "with", (delta_Q, new_state))
-                        goal_states.add(new_state)
-                        removed_item = heapq.heapreplace(goals, (delta_Q, new_state))
-                        goal_states.remove(removed_item[1])
-                    else:
-                        for goal_idx, (goal_dq, state_idx) in enumerate(goals):
-                            if state_idx == new_state and goal_dq < delta_Q:
-                                # print("updating", state_idx, "with", (delta_Q, new_state))
-                                goals[goal_idx] = (delta_Q, state_idx)
-                                heapq.heapify(goals)
-
+                if goal_criterion(old_state, delta_Q):
+                    options.append(learn_option(old_state, self.environment))
                 old_state = new_state
-        return goals
+                # cumulative_reward += (self.time_limit - timestep) * reward
+        return options, cumulative_reward
 
 
 def q_learning_with_options(env, alpha, gamma, epsilon, n_episodes, time_limit, options):
@@ -96,12 +109,13 @@ def is_skill(previous_action):
     return isinstance(previous_action, np.ndarray)
 
 
-def is_terminal(skill, old_state):
+def is_terminate_option(skill, old_state):
     return skill[old_state] == -1
 
 
 class QLearning:
     def __init__(self, alpha, gamma, epsilon, environment, options, time_limit):
+        raise NotImplementedError()
         self.environment = environment
         self.gamma = gamma
         self.alpha = alpha
@@ -114,9 +128,10 @@ class QLearning:
         self.Q1 = 0.00001 * np.random.rand(num_states, self.num_primitive_actions + len(options))
         self.Q2 = 0.00001 * np.random.rand(num_states, self.num_primitive_actions + len(options))
         self.action_list = list(range(self.num_primitive_actions)) + options
-        for state in environment.terminal_states:
-            self.Q1[state, :] = 0
-            self.Q2[state, :] = 0
+        if hasattr(environment, 'terminal_states'):
+            for state in environment.terminal_states:
+                self.Q1[state, :] = 0
+                self.Q2[state, :] = 0
         self.environment = environment
 
     def learn_one_episode(self):
@@ -125,48 +140,33 @@ class QLearning:
 
         old_state = self.environment.reset()
         terminal = False
+        timesteps_under_option = 0
         while not terminal and timestep < self.time_limit:
             action, primitive_action = self.pick_action(old_state)
 
             new_state, reward, terminal, info = self.environment.step(primitive_action)
             cumulativeReward += reward
 
-            if random.random() > 0.5:
-                Q, q = self.Q1, self.Q2
+            if is_skill(action):
+                timesteps_under_option += 1
             else:
-                Q, q = self.Q2, self.Q1
+                if random.random() > 0.5:
+                    Q, q = self.Q1, self.Q2
+                else:
+                    Q, q = self.Q2, self.Q1
 
-            best_future_q = np.max(Q[new_state, :])
-            old_Q = Q[old_state, action]
-            delta_Q = self.alpha * (reward + (self.gamma * best_future_q) - old_Q)
+                best_future_q = np.max(Q[new_state, :])
+                old_Q = Q[old_state, action]
+                delta_Q = self.alpha * (reward + ((self.gamma ** timesteps_under_option) * best_future_q) - old_Q)
+                # delta_Q = self.alpha * (reward + (self.gamma * best_future_q) - old_Q)
 
-            # update the value in self.Q1 or self.Q2 by pointer
-            old_Q += delta_Q
+                # update the value in self.Q1 or self.Q2 by pointer
+                old_Q += delta_Q
 
             old_state = new_state
             timestep += 1
         cumulativeReward += (self.time_limit - timestep) * reward
         return cumulativeReward
-
-    def pick_action(self, old_state):
-        if is_skill(self.previous_action) and not is_terminal(self.previous_action, old_state):
-            primitive_action = self.previous_action[old_state]
-        else:
-            action = None
-            while action is not None and not is_terminal(action, old_state):  # TODO: refactor
-                if self.epsilon > random.random():
-                    Q_total_s = self.Q1[old_state, :] + self.Q2[old_state, :]
-                    action = np.argmax(Q_total_s)
-                else:
-                    action = random.choice(self.action_list)
-
-                if is_skill(action):
-                    primitive_action = action[old_state]
-                else:
-                    primitive_action = action
-
-            self.previous_action = action
-        return primitive_action
 
     def evaluateOneEpisode(self, eps=None, render=False):
         """Evaluate Q-learning for one episode."""
@@ -201,3 +201,14 @@ class QLearning:
             old_state = new_state
             timestep += 1
         return cumulativeReward
+
+
+@disk_utils.disk_cache
+def learn_option(goal, mdp):
+    print("generating policy for goal:", goal)
+
+    def surrogate_reward(_mdp):
+        return 1 if goal == _mdp.agent_position_idx else -1
+
+    option = learners.policy_iter.policyIteration(env=mdp, surrogate_reward=surrogate_reward)
+    return option

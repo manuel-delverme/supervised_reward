@@ -1,5 +1,4 @@
 import sys
-import disk_utils
 import collections
 import learners.double_q
 import learners.policy_iter
@@ -19,25 +18,26 @@ def main():
     NUM_GOALS = 2
     POPULATION_SIZE = 4
 
-    history = collections.deque(maxlen=100)
+    history = collections.deque(maxlen=15)
 
     # env = envs.gridworld.GridWorld()
-    mdp_distribution = mdp_generator.env_generator.EnvGenerator(envs.gridworld.GridWorld, invariants={'size': 12})
+    mdp_distribution = mdp_generator.env_generator.EnvGenerator(envs.gridworld.GridWorld, invariants={'size': 6})
     regressor = controller.meta_controller.EvolutionaryAlgorithm(env_distr=mdp_distribution, population_size=POPULATION_SIZE)
-    goal_selector = goal_selectors.td_error.TDErrorGoals(num_goals=NUM_GOALS)
+    option_generator = goal_selectors.td_error.TDErrorGoals(num_goals=NUM_GOALS)
 
     fitness = None
     reward_function_gen = regressor.get_reward_function()
     for epoch in range(NR_EPOCHS):
         for eval_step, mdp in enumerate(mdp_distribution.gen_samples(training=True)):
-            reward_function = reward_function_gen.send(fitness)
+            intrinsic_reward_function = reward_function_gen.send(fitness)
             if eval_step > TRAINING_SIZE:
                 break
-            # goals = select_goals(goal_selector, mdp, reward_function)
-            goals = goal_selector.select_goals(mdp, reward_function)
-
-            options = learn_skills(goals, mdp)
-
+            options = option_generator.generate_options(
+                mdp,
+                intrinsic_reward_function,
+                training_steps=1000
+            )
+            print("found {} options".format(len(options)))
             print("testing goals")
             cum_cum_reward = 0
             for eval_step, mdp in enumerate(mdp_distribution.gen_samples(training=True)):
@@ -61,20 +61,6 @@ def main():
             #     state, reward, terminal, info = env.step(1)
             #     env.render(mode="ansi")
 
-
-@disk_utils.disk_cache
-def learn_skills(goals, mdp):
-    print("learning goals")
-    options = []
-    for goal in goals:
-        print("generating policy for goal:", goal)
-
-        def surrogate_reward(mdp):
-            return 1 if goal == mdp.s else -1
-
-        skill = learners.policy_iter.policyIteration(env=mdp, surrogate_reward=surrogate_reward)
-        options.append(skill)
-    return options
 
 
 if __name__ == "__main__":
