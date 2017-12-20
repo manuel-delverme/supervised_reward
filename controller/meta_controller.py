@@ -13,7 +13,7 @@ class EvolutionaryAlgorithm(object):
         deap.creator.create("FitnessMin", deap.base.Fitness, weights=(1,))
         deap.creator.create("Individual", list, fitness=deap.creator.FitnessMin)
         toolbox = deap.base.Toolbox()
-        toolbox.register("attribute", random.random)
+        toolbox.register("attribute", lambda: random.random() + 0.5)
         toolbox.register("individual", deap.tools.initRepeat, deap.creator.Individual, toolbox.attribute, n=reward_space_size)
         toolbox.register("population", deap.tools.initRepeat, list, toolbox.individual)
 
@@ -31,7 +31,7 @@ class EvolutionaryAlgorithm(object):
         stats.register("min", np.min)
         stats.register("max", np.max)
         pop, logbook = deap.algorithms.eaSimple(
-            self.toolbox.population(n=50), self.toolbox, cxpb=0.5, mutpb=0.2, ngen=10,
+            self.toolbox.population(n=10), self.toolbox, cxpb=0.5, mutpb=0.2, ngen=10,
             stats=stats, halloffame=deap.tools.HallOfFame(1), verbose=True
         )
         gen, avg, min_, max_ = logbook.select("gen", "avg", "min", "max")

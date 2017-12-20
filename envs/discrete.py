@@ -30,11 +30,11 @@ class DiscreteEnv(Env):
         self.P = P
         self.initial_state_distribution = initial_state_distribution
         self.last_action = None  # for rendering
-        self.number_of_states = number_of_states
+        self.number_of_tiles = number_of_states
         self.number_of_actions = number_of_actions
 
         self.action_space = spaces.Discrete(self.number_of_actions)
-        self.observation_space = spaces.Discrete(self.number_of_states)
+        self.observation_space = spaces.Discrete(self.number_of_tiles)
 
         self._seed()
         self._reset()

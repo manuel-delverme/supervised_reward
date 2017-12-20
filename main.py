@@ -1,7 +1,6 @@
 import sys
 import collections
 import learners.double_q
-import learners.policy_iter
 import controller.meta_controller
 import goal_selectors.td_error
 import mdp_generator.env_generator
@@ -55,7 +54,8 @@ def main():
             _, cum_reward = learner.learn(training_steps=1000)
             cum_cum_reward += cum_reward
         fitness = cum_cum_reward / TEST_SIZE
-        history.append(fitness)
+        # history.append(fitness)
+        print("found {} options".format(len(options)), reward_vector, fitness)
         return fitness,
 
     regressor = controller.meta_controller.EvolutionaryAlgorithm(

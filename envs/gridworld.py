@@ -1,4 +1,5 @@
 import numpy as np
+import gym.spaces
 import random
 from envs import discrete
 import envs.gui
@@ -11,9 +12,9 @@ class Actions(enum.Enum):
     DOWN = 2
     LEFT = 3
     # TERMINAL = -1
-    OPEN_BOX = 4
-    DRINK_WATER = 5
-    EAT_FOOD = 6
+    DRINK_WATER = 4
+    EAT_FOOD = 5
+    # OPEN_BOX = 4
 
 
 class GridWorld(discrete.DiscreteEnv):
@@ -51,7 +52,7 @@ class GridWorld(discrete.DiscreteEnv):
 
         if domain == 'Hungry-Thirsty':
             action_size = 6
-            state_size = board_size * 2 * len(self._state)
+            state_size = board_size
         else:
             raise NotImplementedError()
 
@@ -84,8 +85,8 @@ class GridWorld(discrete.DiscreteEnv):
             Actions.LEFT: - 1,
 
             Actions.EAT_FOOD: 0,
-            Actions.OPEN_BOX: 0,
             Actions.DRINK_WATER: 0,
+            # Actions.OPEN_BOX: 0,
         }
         # transition probabilities
         while not it.finished:
@@ -121,18 +122,20 @@ class GridWorld(discrete.DiscreteEnv):
                     (1.0 - transition_probability, position_idx, reward, position_idx in self.terminal_positions),
                 ]
             # overwrite actions
-            transition[position_idx][Actions.OPEN_BOX] = [(1.0, position_idx, reward, False)]
+            # transition[position_idx][Actions.OPEN_BOX] = [(1.0, position_idx, reward, False)]
             transition[position_idx][Actions.EAT_FOOD] = [(1.0, position_idx, reward, False)]
             transition[position_idx][Actions.DRINK_WATER] = [(1.0, position_idx, reward, False)]
             it.iternext()
 
         super(GridWorld, self).__init__(state_size, action_size, transition, initial_state_distribution)
+        # adding hunger and thirst
+        self.observation_space = gym.spaces.Discrete(self.observation_space.n * 2 * 2)
         self.gui = None
         self.reward_function = None
 
     def _step(self, action):
         action = Actions(action)
-        state_idx, reward, terminal, info = super(GridWorld, self)._step(action)
+        tile_idx, reward, terminal, info = super(GridWorld, self)._step(action)
         self._state['hungry'] = True
         if random.random() < 0.1:
             self._state['thirsty'] = True
@@ -143,8 +146,17 @@ class GridWorld(discrete.DiscreteEnv):
         elif action == Actions.DRINK_WATER:
             assert self.domain in ('Hungry-Thirsty',)
             self._state['thirsty'] = False
-        elif action == Actions.OPEN_BOX:
-            pass
+        # elif action == Actions.OPEN_BOX:
+        #     pass
+        # TODO: prettier hashing
+        state_idx = tile_idx
+        state_idx += self._state['hungry'] * self.number_of_tiles
+        state_idx += self._state['thirsty'] * self.number_of_tiles * 2
+
+        if not self._state['hungry']:
+            reward = 1
+        else:
+            reward = -1
         return state_idx, reward, terminal, info
 
     @staticmethod
@@ -199,7 +211,7 @@ if __name__ == "__main__":
                [Actions.EAT_FOOD] * 6 + \
                [Actions.DRINK_WATER] * 6
 
-    period = 1/60
+    period = 1 / 60
     for action in sequence:
         test_world.step(action.value)
         test_world.render()
@@ -209,4 +221,3 @@ if __name__ == "__main__":
         test_world.step(action)
         test_world.render()
         time.sleep(period)
-
