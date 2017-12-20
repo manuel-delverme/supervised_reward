@@ -18,23 +18,26 @@ class Actions(enum.Enum):
 
 class GridWorld(discrete.DiscreteEnv):
     metadata = {'render.modes': ['human', 'ansi']}
-    _walls = [
-        # vertical
-        (7, 8,),
-        (14, 15,),
-        (19, 20,),
-        (32, 33,),
+    _walls = {
+        8: [9, ],
+        14: [15, 20],
 
-        # horizontal
-        (12 + 0, 12 + 6,),
-        (12 + 1, 12 + 6,),
-        (12 + 2, 12 + 7,),
-        (12 + 3, 12 + 8,),
-        (12 + 4, 12 + 9,),
-        (12 + 5, 12 + 10,),
-    ]
+        20: [21, ],
+        32: [33, ],
 
-    def __init__(self, size, terminal_states, box_positions=(0, 5, 6 * 5 - 1, 6 * 6 - 1), num_boxes=2,
+        12 + 0: [12 + 6, ],
+        12 + 1: [12 + 7, ],
+        # 12 + 2: [12 + 8, ],
+        12 + 3: [12 + 9, ],
+        12 + 4: [12 + 10, ],
+    }
+    for k, v in list(_walls.items()):
+        for vi in v:
+            if vi not in _walls:
+                _walls[vi] = []
+            _walls[vi].append(k)
+
+    def __init__(self, size, terminal_states, box_positions=(0, 5, 30, 35), num_boxes=2,
                  domain='Hungry-Thirsty'):
         self.domain = domain
         self._state = {
@@ -89,7 +92,7 @@ class GridWorld(discrete.DiscreteEnv):
             position_idx = it.iterindex
             y, x = it.multi_index
 
-            transition[position_idx] = {a: [] for a in Actions}
+            transition[position_idx] = {}
             terminal = position_idx in self.terminal_positions
             reward = 0.0 if terminal else -1.0
 
@@ -102,14 +105,14 @@ class GridWorld(discrete.DiscreteEnv):
                 )
                 s1_idx = position_idx + position_change[action]
 
-                if tuple(sorted((position_idx, s1_idx))) in self._walls:
-                    transition_probability = 0
+                if position_idx in self._walls and s1_idx in self._walls[position_idx]:
+                    transition_probability = 0.0
                 elif s1_idx in self.boxes:
-                    transition_probability = 0
+                    transition_probability = 0.0
                 elif s1_idx in self.terminal_positions:
-                    transition_probability = 0
+                    transition_probability = 0.0
                 elif out_of_grid:
-                    transition_probability = 0
+                    transition_probability = 0.0
                 else:
                     transition_probability = base_transition_probability
 
@@ -135,7 +138,7 @@ class GridWorld(discrete.DiscreteEnv):
             self._state['thirsty'] = True
         if action == Actions.EAT_FOOD:
             assert self.domain in ('Hungry-Thirsty',)
-            if self._state['thristy']:
+            if self._state['thirsty']:
                 self._state['hungry'] = False
         elif action == Actions.DRINK_WATER:
             assert self.domain in ('Hungry-Thirsty',)
@@ -157,7 +160,10 @@ class GridWorld(discrete.DiscreteEnv):
             return
         if self.gui is None:
             self.gui = envs.gui.GUI(self.grid)
-        self.gui.print_board(self.agent_position_idx, self.terminal_positions)
+        self.gui.print_board(
+            player_state=self.agent_position_idx, terminal_states=self.terminal_positions,
+            walls=self._walls, boxes=self.boxes
+        )
 
     def teleport_agent(self, new_state):
         self.agent_position_idx = new_state
@@ -171,3 +177,36 @@ class GridWorld(discrete.DiscreteEnv):
         if self.gui is None:
             self.gui = envs.gui.GUI(self.grid)
         self.gui.print_board(self.agent_position_idx, self.terminal_positions, goals=goals)
+
+
+if __name__ == "__main__":
+    import time
+
+    test_world = GridWorld(
+        size=6,
+        terminal_states=(),
+    )
+    test_world.reset()
+    test_world.render()
+    time.sleep(0.2)
+    test_world.teleport_agent(0)
+    test_world.render()
+    time.sleep(0.2)
+    sequence = [Actions.DOWN] * 6 + \
+               [Actions.RIGHT] * 6 + \
+               [Actions.UP] * 6 + \
+               [Actions.LEFT] * 6 + \
+               [Actions.EAT_FOOD] * 6 + \
+               [Actions.DRINK_WATER] * 6
+
+    period = 1/60
+    for action in sequence:
+        test_world.step(action.value)
+        test_world.render()
+        time.sleep(period)
+    while True:
+        action = random.choice(list(Actions)).value
+        test_world.step(action)
+        test_world.render()
+        time.sleep(period)
+
