@@ -1,5 +1,4 @@
 import numpy as np
-import tqdm
 import deap.creator
 import deap.base
 import deap.tools
@@ -65,25 +64,33 @@ class EvolutionaryAlgorithm(object):
                 def surrogate_reward(mdp):
                     # TODO: normalize reward function? to remove 1 dof
                     # TODO: add bias?
+                    thirst = mdp._state['thirsty']
+                    hunger = mdp._state['hungry']
                     reward_vec = individual[0]
-                    # state = np.zeros_like(reward_vec)
-                    # state[mdp.state] = 1
-                    # for state_idx in mdp.terminal_states:
-                    #     state[mdp.state] = -1
-                    # return np.dot(mdp.state, individual[0])
-                    # special case for this gridworld?
-                    reward = reward_vec[mdp.agent_position_idx]
+                    x = np.array((
+                        thirst and hunger,
+                        not thirst and not hunger,
+                        thirst and not hunger,
+                        hunger and not thirst,
+                    ), dtype=np.int)
+                    # can be optimized as reward_vec[idx]
+                    reward = np.dot(reward_vec, x)
+
                     return reward
 
                 self.population[idx][1] = yield surrogate_reward
 
             parents = sorted(self.population, key=lambda p: p[1])[:2]
             # prediction = np.random.rand(self.state_size)
-            next_generation = []
+            next_generation = list(parents)
             while len(next_generation) < self.population_size:
-                offspring = np.empty(self.state_size)
+                offspring = np.empty_like(parents[0][0])
                 p0, p1 = [p[0] for p in parents]
-                mask = np.random.choice([False, True], size=p1.shape, p=[0.5, 0.5])
+                mask = np.random.choice([False, True], size=p0.shape, p=[0.5, 0.5])
                 offspring[mask] = p0[mask]
                 offspring[~mask] = p1[~mask]
-                next_generation.append(offspring)
+                next_generation.append([offspring, None])
+                if random.random() < 0.3:
+                    idx = random.randint(0, offspring.shape[0] - 1)
+                    offspring[idx] += np.random.normal() / 10
+            self.population = list(next_generation)
