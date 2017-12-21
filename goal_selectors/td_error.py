@@ -1,4 +1,5 @@
 import learners
+import time
 
 
 class TDErrorGoals(object):
@@ -12,11 +13,13 @@ class TDErrorGoals(object):
         learner = learners.double_q.DoubleQLearning(env=mdp, surrogate_reward=reward_function)
         # print("selecting goals")
         options, cum_reward = learner.learn(
-            training_steps=training_steps,
+            steps_of_no_change=100,
             goal_criterion=self.make_goal_criterion(self.threshold)
         )
         # TODO: plot learned options
-        # mdp.plot_goals(options)
+        for option in options:
+            mdp.plot_policy(option)
+            time.sleep(1)
         return options
 
     @staticmethod

@@ -2,6 +2,7 @@ import numpy as np
 import disk_utils
 import heapq
 import random
+import collections
 
 
 class DoubleQLearning(object):
@@ -55,59 +56,77 @@ class DoubleQLearning(object):
         self.previous_action = action
         return action, primitive_action
 
-    def learn(self, training_steps, goal_criterion=None):
+    def learn(self, steps_of_no_change, goal_criterion=None):
         # returnSum = 0.0
         # print("[double_q] learn")
-        discovered_options = []
+        # discovered_options = []
         cumulative_reward = 0
 
         old_state = self.environment.reset()
         time_steps_under_option = 0
-        for episode_num in range(training_steps):
-            action, primitive_action = self.pick_action(old_state)
-            new_state, reward, terminal, info = self.environment.step(primitive_action)
+        history = collections.deque(maxlen=100)
+        for _ in range(100): history.append(0)
+        # for episode_num in range(training_steps):
+        no_change = 0
+        while no_change < steps_of_no_change:
+            for position_idx in range(self.environment.number_of_tiles):
+                self.environment.teleport_agent(position_idx)
+                old_state = self.environment.get_state_idx()
 
-            if self.surrogate_reward is not None:
-                reward = self.surrogate_reward(self.environment)
-            cumulative_reward += reward
+                action, primitive_action = self.pick_action(old_state)
+                new_state, reward, terminal, info = self.environment.step(primitive_action)
 
-            if is_option(action):
-                time_steps_under_option += 1
-            else:
-                if random.random() > 0.5:
-                    Q, q = self.Q1, self.Q2
+                if self.surrogate_reward is not None:
+                    reward = self.surrogate_reward(self.environment)
+                cumulative_reward += reward
+
+                if is_option(action):
+                    time_steps_under_option += 1
                 else:
-                    Q, q = self.Q2, self.Q1
+                    if random.random() > 0.5:
+                        Q, q = self.Q1, self.Q2
+                    else:
+                        Q, q = self.Q2, self.Q1
 
-                # TODO: off by one in Q values? should i consider the past transition that led me here instead
-                #  of the outgoing one?
-                best_future_q = np.max(Q[new_state, :])
-                old_Q = Q[old_state, action]
-                k = 1 + time_steps_under_option
-                delta_Q = reward + ((self.gamma ** k) * best_future_q) - old_Q
+                    # TODO: off by one in Q values? should i consider the past transition that led me here instead
+                    #  of the outgoing one?
+                    best_future_q = np.max(Q[new_state, :])
+                    old_Q = Q[old_state, action]
+                    k = 1 + time_steps_under_option
+                    delta_Q = reward + ((self.gamma ** k) * best_future_q) - old_Q
+                    history.append(delta_Q)
+                    # print(sum(abs(h) for h in history)/len(history), no_change, list(reversed(history)))
 
-                # update the value in self.Q1 or self.Q2 by pointer
-                old_Q += self.alpha * delta_Q
+                    # update the value in self.Q1 or self.Q2 by pointer
+                    old_choice = np.argmax(Q[old_state])
+                    Q[old_state][action] += self.alpha * delta_Q
+                    new_choice = np.argmax(Q[old_state])
 
-                # TODO: or new state?
-                if goal_criterion is not None and goal_criterion(old_state, delta_Q):
-                    new_option = learn_option(old_state, self.environment)
-                    self.available_actions.append(new_option)
-                    # TODO: preallocate the matrix
-                    # TODO: reinit last row ~as what?~
-                    option_idx = self.Q1.shape[1] + 1
-                    tmp_Q1 = np.empty((self.Q1.shape[0], option_idx))
-                    tmp_Q1[:, :-1] = self.Q1
-                    self.Q1 = tmp_Q1
-                    self.Q1[:, -1].fill(0)
+                    self.environment.print_board(some_matrix=Q)
+                    if old_choice == new_choice:
+                        no_change += 1
+                    else:
+                        no_change = 0
 
-                    tmp_Q2 = np.empty((self.Q2.shape[0], option_idx))
-                    tmp_Q2[:, :-1] = self.Q2
-                    self.Q2 = tmp_Q2
-                    self.Q2[:, -1].fill(0)
+                    # TODO: or new state?
+                    if goal_criterion is not None and goal_criterion(old_state, delta_Q):
+                        new_option = learn_option(old_state, self.environment)
+                        self.available_actions.append(new_option)
+                        # TODO: preallocate the matrix
+                        # TODO: reinit last row ~as what?~
+                        option_idx = self.Q1.shape[1] + 1
+                        tmp_Q1 = np.empty((self.Q1.shape[0], option_idx))
+                        tmp_Q1[:, :-1] = self.Q1
+                        self.Q1 = tmp_Q1
+                        self.Q1[:, -1].fill(0)
 
-                old_state = new_state
-                # cumulative_reward += (self.time_limit - timestep) * reward
+                        tmp_Q2 = np.empty((self.Q2.shape[0], option_idx))
+                        tmp_Q2[:, :-1] = self.Q2
+                        self.Q2 = tmp_Q2
+                        self.Q2[:, -1].fill(0)
+
+                    old_state = new_state
+                    # cumulative_reward += (self.time_limit - timestep) * reward
         return self.available_actions[self.environment.action_space.n:], cumulative_reward
 
 
@@ -120,9 +139,9 @@ def is_terminate_option(skill, old_state):
     return skill[old_state] == -1
 
 
-@disk_utils.disk_cache
+# @disk_utils.disk_cache
 def learn_option(goal, mdp):
-    # print("generating policy for goal:", goal)
+    print("generating policy for goal:", goal)
 
     def surrogate_reward(_mdp):
         return 1 if goal == _mdp.agent_position_idx else -1
@@ -132,10 +151,10 @@ def learn_option(goal, mdp):
         options=None,
         epsilon=0.1,
         gamma=0.99,
-        alpha=0.1,
+        alpha=0.5,
         surrogate_reward=surrogate_reward
     )
-    _, _ = learner.learn(training_steps=10000)
+    _, _ = learner.learn(steps_of_no_change=100)
     option = np.argmax(learner.Q1 + learner.Q2, axis=1)
     option[goal] = -1
     return option

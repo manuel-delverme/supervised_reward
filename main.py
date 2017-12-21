@@ -18,8 +18,6 @@ def main():
     NUM_GOALS = 2
     POPULATION_SIZE = 10
 
-    history = collections.deque(maxlen=15)
-
     # env = envs.gridworld.GridWorld()
     mdp_distribution = mdp_generator.env_generator.EnvGenerator(envs.gridworld.GridWorld, invariants={'size': 6})
     option_generator = goal_selectors.td_error.TDErrorGoals(num_goals=NUM_GOALS)

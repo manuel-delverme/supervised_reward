@@ -79,13 +79,16 @@ class GUI(object):
         self.player_xy = [(self.size - 2), 0, 0]
         self.movable_layer[self.player_xy[0]][self.player_xy[1]] = self._PLAYER_ICON
 
-    def print_board(self, player_state, terminal_states, mode="graphical", policy=None, goals=None, walls=(), boxes=()):
+    def print_board(self, player_state=None, terminal_states=(), mode="graphical", some_matrix=None, policy=None, goals=None,
+                    walls={}, boxes=()):
         font = pygame.font.SysFont("monospace", 15)
+        policy_font = pygame.font.SysFont("monospace", 50)
+        self.screen.fill((0, 0, 0))
         if mode == "ascii":
             self.clear()
             # Text board printer
             for row in self.movable_layer[:]:
-                    print(" ".join(row))
+                print(" ".join(row))
         else:
             for idx, (x, y) in self.idx_to_xy.items():
                 if policy is not None:
@@ -100,7 +103,8 @@ class GUI(object):
                     elif policy[idx] == -1:
                         square = self._HEALTH_ICON
                     else:
-                        raise ValueError("policy action {} undefined".format(policy[idx]))
+                        square = "option{}".format(policy[idx])
+                        self.icon[square] = policy_font.render(str(policy[idx]), 1, (255, 255, 0))
                 elif idx == player_state:
                     square = self._PLAYER_ICON
                 elif idx in terminal_states:
@@ -113,6 +117,9 @@ class GUI(object):
                 if goals is not None and idx in goals:
                     square = self._HEALTH_ICON
 
+                if some_matrix is not None:
+                    font.render(str(some_matrix[idx]), 1, (0, 0, 0))
+
                 icon_x = x * self.tile_size
                 icon_y = y * self.tile_size
                 label = font.render(str(idx), 1, (255, 255, 0))
@@ -121,14 +128,17 @@ class GUI(object):
                 try:
                     tile_walls = walls[idx]
                 except KeyError:
-                    pygame.draw.rect(self.screen, (255, 255, 255), [icon_x + self.tile_size / 2, icon_y + self.tile_size / 2, 10, 10])
+                    pygame.draw.rect(self.screen, (255, 255, 255),
+                                     [icon_x + self.tile_size / 2, icon_y + self.tile_size / 2, 10, 10])
                 else:
                     if idx + 1 in tile_walls:
-                        pygame.draw.rect(self.screen, (255, 255, 0), [icon_x + self.tile_size - 10, icon_y, 10, self.tile_size])
+                        pygame.draw.rect(self.screen, (255, 255, 0),
+                                         [icon_x + self.tile_size - 10, icon_y, 10, self.tile_size])
                     if idx - 1 in tile_walls:
                         pygame.draw.rect(self.screen, (255, 0, 0), [icon_x, icon_y, 10, self.tile_size])
                     if idx + 6 in tile_walls:
-                        pygame.draw.rect(self.screen, (0, 255, 0), [icon_x, icon_y + self.tile_size - 10, self.tile_size, 10])
+                        pygame.draw.rect(self.screen, (0, 255, 0),
+                                         [icon_x, icon_y + self.tile_size - 10, self.tile_size, 10])
                     if idx - 6 in tile_walls:
                         pygame.draw.rect(self.screen, (0, 0, 255), [icon_x, icon_y, self.tile_size, 10])
             pygame.display.update()

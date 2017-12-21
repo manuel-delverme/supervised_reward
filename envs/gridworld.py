@@ -149,15 +149,21 @@ class GridWorld(discrete.DiscreteEnv):
         # elif action == Actions.OPEN_BOX:
         #     pass
         # TODO: prettier hashing
-        state_idx = tile_idx
-        state_idx += self._state['hungry'] * self.number_of_tiles
-        state_idx += self._state['thirsty'] * self.number_of_tiles * 2
+        state_idx = self.get_state_idx(tile_idx)
 
         if not self._state['hungry']:
             reward = 1
         else:
             reward = -1
         return state_idx, reward, terminal, info
+
+    def get_state_idx(self, tile_idx=None):
+        if tile_idx is None:
+            tile_idx = self.agent_position_idx
+        state_idx = tile_idx
+        state_idx += self._state['hungry'] * self.number_of_tiles
+        state_idx += self._state['thirsty'] * self.number_of_tiles * 2
+        return state_idx
 
     @staticmethod
     def get_params():
@@ -173,22 +179,34 @@ class GridWorld(discrete.DiscreteEnv):
         if self.gui is None:
             self.gui = envs.gui.GUI(self.grid)
         self.gui.print_board(
-            player_state=self.agent_position_idx, terminal_states=self.terminal_positions,
+            player_state=self.agent_position_idx,
+            terminal_states=self.terminal_positions,
             walls=self._walls, boxes=self.boxes
         )
 
-    def teleport_agent(self, new_state):
-        self.agent_position_idx = new_state
+    def print(self, mode='human', close=False):
+        if close:
+            return
+        if self.gui is None:
+            self.gui = envs.gui.GUI(self.grid)
+        self.gui.print_board(
+            player_state=self.agent_position_idx,
+            terminal_states=self.terminal_positions,
+            walls=self._walls, boxes=self.boxes
+        )
+
+    def teleport_agent(self, new_position):
+        self.agent_position_idx = new_position
 
     def plot_policy_and_value(self, pi, V):
         if self.gui is None:
             self.gui = envs.gui.GUI(self.grid)
         self.gui.print_board(self.agent_position_idx, self.terminal_positions, policy=pi)
 
-    def plot_goals(self, goals):
+    def plot_policy(self, policy):
         if self.gui is None:
             self.gui = envs.gui.GUI(self.grid)
-        self.gui.print_board(self.agent_position_idx, self.terminal_positions, goals=goals)
+        self.gui.print_board(self.agent_position_idx, self.terminal_positions, policy=policy)
 
 
 if __name__ == "__main__":
