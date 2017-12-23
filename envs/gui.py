@@ -44,7 +44,7 @@ class GUI(object):
         self.icon = {}
         for key, val in self._icon.items():
             img = pygame.image.load(val)
-            self.icon[key] = pygame.transform.scale(img, (self.tile_size, self.tile_size))
+            self.icon[key] = pygame.transform.scale(img, (int(self.tile_size * 0.5), int(self.tile_size * 0.5)))
 
         self.display_width, self.display_height = self.width * self.tile_size, self.width * self.tile_size
         pygame.init()
@@ -58,26 +58,27 @@ class GUI(object):
 
         font = pygame.font.SysFont("monospace", 15)
         policy_font = pygame.font.SysFont("monospace", 50)
-        self.screen.fill((0, 0, 0))
+        self.screen.fill((255, 255, 255))
         num_of_tiles = self.width * self.height
         if some_matrix is not None:
-            some_matrix_max = some_matrix.max()
-
-            some_matrix_min = some_matrix[num_of_tiles: num_of_tiles * 2].min()
+            some_matrix_max = 1e-9 + some_matrix[num_of_tiles: num_of_tiles * 2].max()
+            some_matrix_min = 1e-9 + some_matrix[num_of_tiles: num_of_tiles * 2].min()
         for tile_idx in range(num_of_tiles):
             # plot the values for hungry ~thirsty
             state_hash = tile_idx + num_of_tiles
             x = tile_idx % self.width
             y = tile_idx // self.width
-            if policy is not None:
+            if tile_idx == player_position:
+                square_icon = self.icon[self._PLAYER_ICON]
+            elif policy is not None:
                 policy_act = policy[state_hash]
                 try:
                     square_icon = self.icon[policy_act]
                 except KeyError:
                     self.icon[policy_act] = policy_font.render(str(policy_act), 1, (255, 255, 0))
                     square_icon = self.icon[policy_act]
-            elif tile_idx == player_position:
-                square_icon = self._PLAYER_ICON
+            # elif tile_idx == player_position:
+            #     square_icon = self._PLAYER_ICON
             elif tile_idx in terminal_states:
                 square_icon = self._BANDIT_ICON
             elif tile_idx in boxes:
@@ -97,16 +98,16 @@ class GUI(object):
                 value = (some_matrix[state_hash] - some_matrix_min) / (some_matrix_max - some_matrix_min)
                 value *= 255.0
 
-                color = (value, 255, 0)
-                value = str(int(some_matrix[state_hash]))
+                # color = (value, 255, 0)
+                value = str(int(some_matrix[state_hash] * 100) / 100)
                 text = font.render(value, 2, yellow)
-                rect_coords = (icon_x + self.tile_size / 2, icon_y + self.tile_size / 2, 10, 10)
-                pygame.draw.rect(self.screen, color, rect_coords)
+                # rect_coords = (icon_x + self.tile_size / 2, icon_y + self.tile_size / 2, 10, 10)
+                # pygame.draw.rect(self.screen, color, rect_coords)
             else:
                 text = font.render(str(tile_idx), 1, yellow)
 
             # self.screen.blit(font_repr, (icon_x + self.tile_size / 2, icon_y + self.tile_size / 2))
-            self.screen.blit(text, (icon_x + 5, icon_y + 5))
+            self.screen.blit(text, (icon_x, icon_y + self.tile_size / 2))
 
             try:
                 tile_walls = walls[tile_idx]

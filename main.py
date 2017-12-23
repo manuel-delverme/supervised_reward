@@ -1,28 +1,26 @@
-import sys
-import collections
-import learners.double_q
+import learners.qlearning
 import controller.meta_controller
-import goal_selectors.td_error
 import envs.hungry_thirsty
-import mdp_generator.env_generator
 import numpy as np
 import tqdm
-# from learning import Learning
-
 import envs.gridworld
+import time
+import itertools
 
 
 def main():
     TRAINING_SIZE = 1
     NR_EPOCHS = 1000
-    TEST_SIZE = 1
-    NUM_GOALS = 2
+    TEST_SIZE = 11
     POPULATION_SIZE = 10
 
-    # env = envs.gridworld.GridWorld()
-    option_generator = goal_selectors.td_error.TDErrorGoals(num_goals=NUM_GOALS)
+    # TEST RUN
+    mdp = envs.hungry_thirsty.HungryThirsty(side_size=6, box_positions=(0, 1))
+    learner = learners.qlearning.QLearning(env=mdp)
+    options, cum_reward = learner.learn(steps_of_no_change=100, generate_options=False)
+    print(cum_reward)
 
-    def eval_reward_function(reward_vector):
+    def fitness(reward_vector):
         mdp = envs.hungry_thirsty.HungryThirsty(side_size=6)
 
         def intrinsic_reward_function(_mdp):
@@ -37,19 +35,16 @@ def main():
             # can be optimized as reward_vec[idx]
             return np.dot(reward_vector, x)
 
-        # turn reward into options
-        options = option_generator.generate_options(mdp, intrinsic_reward_function, training_steps=1000)
-        # progress_bar.set_description("found: {} options\n history: {}\n pop:\n{}\n".format(
-        #     len(options),
-        #     history,
-        #     "\n".join([str(el[0]) for el in regressor.population])
-        # ))
+        learner = learners.qlearning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function)
+        options, cum_reward = learner.learn(steps_of_no_change=100, generate_options=True)
 
         # eval options
         cum_cum_reward = 0
-        for eval_step, mdp in zip(range(TEST_SIZE), mdp_distribution.gen_samples(training=False)):
-            learner = learners.double_q.DoubleQLearning(env=mdp, options=options)
-            _, cum_reward = learner.learn(training_steps=1000)
+        possible_box_positions = itertools.combinations([0, 6, 30, 36], 2)
+        for eval_step, box_positions in zip(range(TEST_SIZE), possible_box_positions):
+            mdp = envs.hungry_thirsty.HungryThirsty(side_size=6, box_positions=box_positions)
+            learner = learners.qlearning.QLearning(env=mdp, options=options)
+            _, cum_reward = learner.learn(steps_of_no_change=100, generate_options=False)
             cum_cum_reward += cum_reward
         fitness = cum_cum_reward / TEST_SIZE
         # history.append(fitness)
@@ -58,7 +53,7 @@ def main():
 
     regressor = controller.meta_controller.EvolutionaryAlgorithm(
         population_size=POPULATION_SIZE,
-        fitness_function=eval_reward_function,
+        fitness_function=fitness,
     )
     regressor.optimize()
 
