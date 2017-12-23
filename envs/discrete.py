@@ -1,17 +1,6 @@
-import numpy as np
-
+import random
 from gym import Env, spaces
 from gym.utils import seeding
-
-
-def categorical_sample(prob_n, np_random):
-    """
-    Sample from categorical distribution
-    Each row specifies class probabilities
-    """
-    prob_n = np.asarray(prob_n)
-    csprob_n = np.cumsum(prob_n)
-    return (csprob_n > np_random.rand()).argmax()
 
 
 class DiscreteEnv(Env):
@@ -44,14 +33,19 @@ class DiscreteEnv(Env):
         return [seed]
 
     def _reset(self):
-        self.agent_position_idx = categorical_sample(self.initial_state_distribution, self.np_random)
+        self.agent_position_idx = random.randint(0, self.number_of_tiles)
         self.last_action = None
         return self.agent_position_idx
 
     def _step(self, action):
         transitions = self.transition_matrix[self.agent_position_idx][action]
-        i = categorical_sample([t[0] for t in transitions], self.np_random)
-        p, s, r, d = transitions[i]
+        pick = random.random()
+        val = 0
+        for t in transitions:
+            val += t[0]
+            if val > pick:
+                break
+        p, s, r, d = t
         self.agent_position_idx = s
         self.last_action = action
         return s, r, d, {"prob": p}
