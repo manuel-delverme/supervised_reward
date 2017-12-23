@@ -1,4 +1,5 @@
 import os
+# from collections import frozendict
 import pygame
 import random
 import sys
@@ -18,10 +19,6 @@ class GUI(object):
     _BANDIT_ICON = 'B'
     _HEALTH_ICON = 'H'
     _PLAYER_ICON = "P"
-    _UPARRORW_ICON = "^"
-    _DOWNARRORW_ICON = "v"
-    _LEFTARRORW_ICON = "<"
-    _RIGHTARRORW_ICON = ">"
 
     _UP = 0
     _RIGHT = 1
@@ -33,118 +30,100 @@ class GUI(object):
         _BANDIT_ICON: _BANDIT_RESOURCE,
         _HEALTH_ICON: _HEALTH_RESOURCE,
         _PLAYER_ICON: _PLAYER_RESOURCE,
-        _UPARRORW_ICON: _UPARRORW_RESOURCE,
-        _DOWNARRORW_ICON: _DOWNARRORW_RESOURCE,
-        _LEFTARRORW_ICON: _LEFTARRORW_RESOURCE,
-        _RIGHTARRORW_ICON: _RIGHTARRORW_RESOURCE,
+        _UP: _UPARRORW_RESOURCE,
+        _DOWN: _DOWNARRORW_RESOURCE,
+        _LEFT: _LEFTARRORW_RESOURCE,
+        _RIGHT: _RIGHTARRORW_RESOURCE,
     }
 
-    def __init__(self, grid, tile_size=50):
+    def __init__(self, width, tile_size=50):
         self.tile_size = tile_size
-        self.size = grid.shape[0]
+        self.width = width
+        self.height = width
 
         self.icon = {}
         for key, val in self._icon.items():
             img = pygame.image.load(val)
             self.icon[key] = pygame.transform.scale(img, (self.tile_size, self.tile_size))
 
-        self.width, self.height = self.size * self.tile_size, self.size * self.tile_size
+        self.display_width, self.display_height = self.width * self.tile_size, self.width * self.tile_size
         pygame.init()
-        self.screen = pygame.display.set_mode((self.width, self.height))
-
-        if sys.platform == "linux" or sys.platform == "linux2":  # Clear cmd/terminal text screen
-            self.clear = lambda: os.system('clear')
-        elif sys.platform == "darwin":
-            self.clear = lambda: os.system('clear')
-        elif sys.platform == "win32":
-            self.clear = lambda: os.system('cls')
-
-        # Boards
-        self.background_layer = []  # Static objects such as buttons, ground and walls.
-        # self.memory_board = []  # Counts the steps each block has recieved for limited use items such as health pacs
-        self.movable_layer = []  # Front-end. Move your player around this board without affecting static objects.
-
-        self.idx_to_xy = {}
-        for row_idx, row in enumerate(grid):
-            for col_idx, state in enumerate(row):
-                self.idx_to_xy[state] = (col_idx, row_idx)
-
-        # Map array writer
-        for click in range(self.size):
-            self.background_layer.append([self._LAND_ICON] * self.size)
-            self.movable_layer.append([self._LAND_ICON] * self.size)
-            # self.memory_board.append([0] * self.size)
+        self.screen = pygame.display.set_mode((self.display_width, self.display_height))
 
         # vars
-        self.player_xy = [(self.size - 2), 0, 0]
-        self.movable_layer[self.player_xy[0]][self.player_xy[1]] = self._PLAYER_ICON
+        self.player_xy = [(self.width - 2), 0, 0]
 
-    def print_board(self, player_state=None, terminal_states=(), mode="graphical", some_matrix=None, policy=None, goals=None,
-                    walls={}, boxes=()):
+    def print_board(self, player_position=None, terminal_states=(), some_matrix=None, policy=None, goals=None,
+                    walls={}, boxes=(), player_state=None):
+
         font = pygame.font.SysFont("monospace", 15)
         policy_font = pygame.font.SysFont("monospace", 50)
         self.screen.fill((0, 0, 0))
-        if mode == "ascii":
-            self.clear()
-            # Text board printer
-            for row in self.movable_layer[:]:
-                print(" ".join(row))
-        else:
-            for idx, (x, y) in self.idx_to_xy.items():
-                if policy is not None:
-                    if policy[idx] == self._UP:
-                        square = self._UPARRORW_ICON
-                    elif policy[idx] == self._DOWN:
-                        square = self._DOWNARRORW_ICON
-                    elif policy[idx] == self._LEFT:
-                        square = self._LEFTARRORW_ICON
-                    elif policy[idx] == self._RIGHT:
-                        square = self._RIGHTARRORW_ICON
-                    elif policy[idx] == -1:
-                        square = self._HEALTH_ICON
-                    else:
-                        square = "option{}".format(policy[idx])
-                        self.icon[square] = policy_font.render(str(policy[idx]), 1, (255, 255, 0))
-                elif idx == player_state:
-                    square = self._PLAYER_ICON
-                elif idx in terminal_states:
-                    square = self._BANDIT_ICON
-                elif idx in boxes:
-                    square = self._HEALTH_ICON
-                else:
-                    square = self._LAND_ICON
+        num_of_tiles = self.width * self.height
+        if some_matrix is not None:
+            some_matrix_max = some_matrix.max()
 
-                if goals is not None and idx in goals:
-                    square = self._HEALTH_ICON
-
-                if some_matrix is not None:
-                    font.render(str(some_matrix[idx]), 1, (0, 0, 0))
-
-                icon_x = x * self.tile_size
-                icon_y = y * self.tile_size
-                label = font.render(str(idx), 1, (255, 255, 0))
-                self.screen.blit(self.icon[square], (icon_x, icon_y))
-                self.screen.blit(label, (icon_x + 5, icon_y + 5))
+            some_matrix_min = some_matrix[num_of_tiles: num_of_tiles * 2].min()
+        for tile_idx in range(num_of_tiles):
+            # plot the values for hungry ~thirsty
+            state_hash = tile_idx + num_of_tiles
+            x = tile_idx % self.width
+            y = tile_idx // self.width
+            if policy is not None:
+                policy_act = policy[state_hash]
                 try:
-                    tile_walls = walls[idx]
+                    square_icon = self.icon[policy_act]
                 except KeyError:
-                    pygame.draw.rect(self.screen, (255, 255, 255),
-                                     [icon_x + self.tile_size / 2, icon_y + self.tile_size / 2, 10, 10])
-                else:
-                    if idx + 1 in tile_walls:
-                        pygame.draw.rect(self.screen, (255, 255, 0),
-                                         [icon_x + self.tile_size - 10, icon_y, 10, self.tile_size])
-                    if idx - 1 in tile_walls:
-                        pygame.draw.rect(self.screen, (255, 0, 0), [icon_x, icon_y, 10, self.tile_size])
-                    if idx + 6 in tile_walls:
-                        pygame.draw.rect(self.screen, (0, 255, 0),
-                                         [icon_x, icon_y + self.tile_size - 10, self.tile_size, 10])
-                    if idx - 6 in tile_walls:
-                        pygame.draw.rect(self.screen, (0, 0, 255), [icon_x, icon_y, self.tile_size, 10])
-            pygame.display.update()
+                    self.icon[policy_act] = policy_font.render(str(policy_act), 1, (255, 255, 0))
+                    square_icon = self.icon[policy_act]
+            elif tile_idx == player_position:
+                square_icon = self._PLAYER_ICON
+            elif tile_idx in terminal_states:
+                square_icon = self._BANDIT_ICON
+            elif tile_idx in boxes:
+                square_icon = self._HEALTH_ICON
+            else:
+                square_icon = self._LAND_ICON
+            if goals is not None and tile_idx in goals:
+                square_icon = self._HEALTH_ICON
 
+            icon_x = x * self.tile_size
+            icon_y = y * self.tile_size
 
-if __name__ == "__main__":
-    gui = GUI()
-    while True:
-        gui.render_action(random.choice(list("wasd")))
+            self.screen.blit(square_icon, (icon_x, icon_y))
+
+            yellow = (0, 0, 255)
+            if some_matrix is not None:
+                value = (some_matrix[state_hash] - some_matrix_min) / (some_matrix_max - some_matrix_min)
+                value *= 255.0
+
+                color = (value, 255, 0)
+                value = str(int(some_matrix[state_hash]))
+                text = font.render(value, 2, yellow)
+                rect_coords = (icon_x + self.tile_size / 2, icon_y + self.tile_size / 2, 10, 10)
+                pygame.draw.rect(self.screen, color, rect_coords)
+            else:
+                text = font.render(str(tile_idx), 1, yellow)
+
+            # self.screen.blit(font_repr, (icon_x + self.tile_size / 2, icon_y + self.tile_size / 2))
+            self.screen.blit(text, (icon_x + 5, icon_y + 5))
+
+            try:
+                tile_walls = walls[tile_idx]
+            except KeyError:
+                pass
+            else:
+                if tile_idx + 1 in tile_walls:
+                    pygame.draw.rect(self.screen, (255, 255, 0),
+                                     [icon_x + self.tile_size - 10, icon_y, 10, self.tile_size])
+                if tile_idx - 1 in tile_walls:
+                    pygame.draw.rect(self.screen, (255, 0, 0), [icon_x, icon_y, 10, self.tile_size])
+                if tile_idx + 6 in tile_walls:
+                    pygame.draw.rect(self.screen, (0, 255, 0),
+                                     [icon_x, icon_y + self.tile_size - 10, self.tile_size, 10])
+                if tile_idx - 6 in tile_walls:
+                    pygame.draw.rect(self.screen, (0, 0, 255), [icon_x, icon_y, self.tile_size, 10])
+        pygame.display.update()
+
+    def act_to_icon(self, policy_act):
+        pass

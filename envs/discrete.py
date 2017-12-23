@@ -26,8 +26,8 @@ class DiscreteEnv(Env):
     (**) list or array of length nS
     """
 
-    def __init__(self, number_of_states, number_of_actions, P, initial_state_distribution):
-        self.P = P
+    def __init__(self, number_of_states, number_of_actions, transition_matrix, initial_state_distribution):
+        self.transition_matrix = transition_matrix
         self.initial_state_distribution = initial_state_distribution
         self.last_action = None  # for rendering
         self.number_of_tiles = number_of_states
@@ -49,7 +49,7 @@ class DiscreteEnv(Env):
         return self.agent_position_idx
 
     def _step(self, action):
-        transitions = self.P[self.agent_position_idx][action]
+        transitions = self.transition_matrix[self.agent_position_idx][action]
         i = categorical_sample([t[0] for t in transitions], self.np_random)
         p, s, r, d = transitions[i]
         self.agent_position_idx = s

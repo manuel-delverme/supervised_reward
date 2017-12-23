@@ -3,6 +3,7 @@ import collections
 import learners.double_q
 import controller.meta_controller
 import goal_selectors.td_error
+import envs.hungry_thirsty
 import mdp_generator.env_generator
 import numpy as np
 import tqdm
@@ -19,15 +20,14 @@ def main():
     POPULATION_SIZE = 10
 
     # env = envs.gridworld.GridWorld()
-    mdp_distribution = mdp_generator.env_generator.EnvGenerator(envs.gridworld.GridWorld, invariants={'size': 6})
     option_generator = goal_selectors.td_error.TDErrorGoals(num_goals=NUM_GOALS)
 
     def eval_reward_function(reward_vector):
-        mdp = next(mdp_distribution.gen_samples(training=True))
+        mdp = envs.hungry_thirsty.HungryThirsty(side_size=6)
 
-        def intrinsic_reward_function(mdp):
-            thirst = mdp._state['thirsty']
-            hunger = mdp._state['hungry']
+        def intrinsic_reward_function(_mdp):
+            thirst = _mdp._state['thirsty']
+            hunger = _mdp._state['hungry']
             x = np.array((
                 thirst and hunger,
                 not thirst and not hunger,

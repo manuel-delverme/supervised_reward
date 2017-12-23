@@ -2,7 +2,6 @@ import numpy as np
 import disk_utils
 import heapq
 import random
-import collections
 
 
 class DoubleQLearning(object):
@@ -64,14 +63,14 @@ class DoubleQLearning(object):
 
         old_state = self.environment.reset()
         time_steps_under_option = 0
-        history = collections.deque(maxlen=100)
-        for _ in range(100): history.append(0)
+        # history = collections.deque(maxlen=100)
+        # for _ in range(100): history.append(0)
         # for episode_num in range(training_steps):
         no_change = 0
         while no_change < steps_of_no_change:
             for position_idx in range(self.environment.number_of_tiles):
                 self.environment.teleport_agent(position_idx)
-                old_state = self.environment.get_state_idx()
+                old_state = self.environment._hash_state()
 
                 action, primitive_action = self.pick_action(old_state)
                 new_state, reward, terminal, info = self.environment.step(primitive_action)
@@ -83,30 +82,40 @@ class DoubleQLearning(object):
                 if is_option(action):
                     time_steps_under_option += 1
                 else:
-                    if random.random() > 0.5:
-                        Q, q = self.Q1, self.Q2
-                    else:
-                        Q, q = self.Q2, self.Q1
-
+                    old_choice = np.argmax(self.Q1[old_state] + self.Q2[old_state])
                     # TODO: off by one in Q values? should i consider the past transition that led me here instead
                     #  of the outgoing one?
-                    best_future_q = np.max(Q[new_state, :])
-                    old_Q = Q[old_state, action]
-                    k = 1 + time_steps_under_option
-                    delta_Q = reward + ((self.gamma ** k) * best_future_q) - old_Q
-                    history.append(delta_Q)
-                    # print(sum(abs(h) for h in history)/len(history), no_change, list(reversed(history)))
+                    use_Q1 = random.choice((True, False))
+                    if use_Q1:
+                        best_future_q = np.max(self.Q2[new_state, :])
+                        old_Q = self.Q1[old_state, action]
+                        k = 1 + time_steps_under_option
+                        delta_Q = reward + ((self.gamma ** k) * best_future_q) - old_Q
+                        # history.append(delta_Q)
+                        # print(sum(abs(h) for h in history)/len(history), no_change, list(reversed(history)))
 
-                    # update the value in self.Q1 or self.Q2 by pointer
-                    old_choice = np.argmax(Q[old_state])
-                    Q[old_state][action] += self.alpha * delta_Q
-                    new_choice = np.argmax(Q[old_state])
+                        # update the value in self.Q1 or self.Q2 by pointer
+                        old_choice = np.argmax(self.Q1[old_state])
+                        self.Q1[old_state][action] += self.alpha * delta_Q
+                    else:
+                        best_future_q = np.max(self.Q1[new_state, :])
+                        old_Q = self.Q2[old_state, action]
+                        k = 1 + time_steps_under_option
+                        delta_Q = reward + ((self.gamma ** k) * best_future_q) - old_Q
 
-                    self.environment.print_board(some_matrix=Q)
+                        # update the value in self.Q1 or self.Q2 by pointer
+                        self.Q2[old_state][action] += self.alpha * delta_Q
+
+                    self.environment.print_board(
+                        some_matrix=np.max(self.Q1 + self.Q2, axis=1),
+                        policy=np.argmax(self.Q1 + self.Q2, axis=1)
+                    )
+                    new_choice = np.argmax(self.Q1[old_state] + self.Q2[old_state])
                     if old_choice == new_choice:
                         no_change += 1
                     else:
                         no_change = 0
+                    print("no_change", no_change)
 
                     # TODO: or new state?
                     if goal_criterion is not None and goal_criterion(old_state, delta_Q):
