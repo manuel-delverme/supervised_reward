@@ -93,18 +93,18 @@ class GUI(object):
 
             self.screen.blit(square_icon, (icon_x, icon_y))
 
-            yellow = (0, 0, 255)
+            blue = (0, 0, 255)
             if some_matrix is not None:
                 value = (some_matrix[state_hash] - some_matrix_min) / (some_matrix_max - some_matrix_min)
                 value *= 255.0
 
                 # color = (value, 255, 0)
                 value = str(int(some_matrix[state_hash] * 100) / 100)
-                text = font.render(value, 2, yellow)
+                text = font.render(value, 2, blue)
                 # rect_coords = (icon_x + self.tile_size / 2, icon_y + self.tile_size / 2, 10, 10)
                 # pygame.draw.rect(self.screen, color, rect_coords)
             else:
-                text = font.render(str(tile_idx), 1, yellow)
+                text = font.render(str(tile_idx), 1, blue)
 
             # self.screen.blit(font_repr, (icon_x + self.tile_size / 2, icon_y + self.tile_size / 2))
             self.screen.blit(text, (icon_x, icon_y + self.tile_size / 2))
