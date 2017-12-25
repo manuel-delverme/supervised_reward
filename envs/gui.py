@@ -36,7 +36,7 @@ class GUI(object):
         _RIGHT: _RIGHTARRORW_RESOURCE,
     }
 
-    def __init__(self, width, tile_size=50):
+    def __init__(self, width, tile_size=70):
         self.tile_size = tile_size
         self.width = width
         self.height = width
@@ -54,18 +54,22 @@ class GUI(object):
         self.player_xy = [(self.width - 2), 0, 0]
 
     def print_board(self, player_position=None, terminal_states=(), some_matrix=None, policy=None, goals=None,
-                    walls={}, boxes=(), player_state=None):
+                    walls={}, boxes=(), hungry=True, thirsty=True):
 
         font = pygame.font.SysFont("monospace", 15)
         policy_font = pygame.font.SysFont("monospace", 50)
         self.screen.fill((255, 255, 255))
         num_of_tiles = self.width * self.height
+
+        slice_start = int(hungry) * num_of_tiles
+        slice_start += int(thirsty) * num_of_tiles * 2
+        slice_end = slice_start + num_of_tiles
+
         if some_matrix is not None:
-            some_matrix_max = 1e-9 + some_matrix[num_of_tiles: num_of_tiles * 2].max()
-            some_matrix_min = 1e-9 + some_matrix[num_of_tiles: num_of_tiles * 2].min()
+            some_matrix_max = 1e-9 + some_matrix[slice_start: slice_end].max()
+            some_matrix_min = 1e-9 + some_matrix[slice_start: slice_end].min()
         for tile_idx in range(num_of_tiles):
-            # plot the values for hungry ~thirsty
-            state_hash = tile_idx + num_of_tiles
+            state_hash = tile_idx + slice_start
             x = tile_idx % self.width
             y = tile_idx // self.width
             if tile_idx == player_position:
@@ -80,15 +84,15 @@ class GUI(object):
             # elif tile_idx == player_position:
             #     square_icon = self._PLAYER_ICON
             elif tile_idx in terminal_states:
-                square_icon = self._BANDIT_ICON
+                square_icon = self.icon[self._BANDIT_ICON]
             elif tile_idx in boxes:
-                square_icon = self._HEALTH_ICON
+                square_icon = self.icon[self._HEALTH_ICON]
             else:
-                square_icon = self._LAND_ICON
+                square_icon = self.icon[self._LAND_ICON]
             if goals is not None and tile_idx in goals:
-                square_icon = self._HEALTH_ICON
+                square_icon = self.icon[self._HEALTH_ICON]
 
-            icon_x = x * self.tile_size
+            icon_x = x * self.tile_size + 10
             icon_y = y * self.tile_size
 
             self.screen.blit(square_icon, (icon_x, icon_y))
@@ -103,11 +107,11 @@ class GUI(object):
                 text = font.render(value, 2, blue)
                 # rect_coords = (icon_x + self.tile_size / 2, icon_y + self.tile_size / 2, 10, 10)
                 # pygame.draw.rect(self.screen, color, rect_coords)
-            else:
-                text = font.render(str(tile_idx), 1, blue)
+                self.screen.blit(text, (icon_x, icon_y + self.tile_size / 2))
 
+            text = font.render(str(state_hash), 1, (0, 0, 0))
             # self.screen.blit(font_repr, (icon_x + self.tile_size / 2, icon_y + self.tile_size / 2))
-            self.screen.blit(text, (icon_x, icon_y + self.tile_size / 2))
+            self.screen.blit(text, (icon_x, icon_y))
 
             try:
                 tile_walls = walls[tile_idx]

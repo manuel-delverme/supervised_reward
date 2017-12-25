@@ -18,7 +18,7 @@ class HungryThirstyActions(enum.Enum):
 
 
 class HungryThirsty(envs.gridworld.GridWorld):
-    def __init__(self, side_size, box_positions=(0, 5, 30, 35), num_boxes=2):
+    def __init__(self, side_size, water_position=0, food_position=5):
         self._state = {
             'hungry': True,
             'thirsty': True,
@@ -36,7 +36,7 @@ class HungryThirsty(envs.gridworld.GridWorld):
             base_transition_probability=0.9,
         )
         extra_dof = len(self._state) * 2
-        self.water_position, self.food_position = box_positions
+        self.water_position, self.food_position = water_position, food_position
         self.observation_space = gym.spaces.Discrete(self.observation_space.n * extra_dof)
         self.action_space = gym.spaces.Discrete(self.action_space.n + len(self._state))
 
@@ -60,18 +60,24 @@ class HungryThirsty(envs.gridworld.GridWorld):
 
         state_obj = self._hash_state()
 
-        reward = 0
+        reward = -1
         if not self._state['hungry']:
-            reward += 1
-        else:
-            reward += -1
+            reward = 1
+        # else:
+        #     reward += -1
 
-        if not self._state['thirsty']:
-            reward += 0.1
-        else:
-            reward += -1
+        # if not self._state['thirsty']:
+        #     reward += 0.1
+        # else:
+        #     reward += -1
 
         return state_obj, reward, terminal, info
+
+    def _reset(self):
+        _ = super(envs.gridworld.GridWorld, self)._reset()
+        self._state['hungry'] = True
+        self._state['thirsty'] = random.choice((True, False))
+        return self._hash_state()
 
     def _hash_state(self):
         state_hash = self.agent_position_idx
@@ -79,19 +85,21 @@ class HungryThirsty(envs.gridworld.GridWorld):
         state_hash += self._state['thirsty'] * self.number_of_tiles * 2
         return state_hash  # state.State(state_hash=state_hash, state_info=self._state.copy())
 
-    def print_board(self, some_matrix=None, close=False, policy=None):
+    def print_board(self, some_matrix=None, close=False, policy=None, hungry=True, thirsty=True):
         if close:
             return
         if self.gui is None:
             self.gui = envs.gui.GUI(self.width)
         self.gui.print_board(
             player_position=self.agent_position_idx,
-            player_state=self._state,
             terminal_states=self.terminal_positions,
             walls=self._walls, boxes=self.boxes,
             some_matrix=some_matrix,
             policy=policy,
+            hungry=True,
+            thirsty=True,
         )
+
 
 if __name__ == "__main__":
     import time

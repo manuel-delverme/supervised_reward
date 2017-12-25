@@ -33,7 +33,7 @@ class DiscreteEnv(Env):
         return [seed]
 
     def _reset(self):
-        self.agent_position_idx = random.randint(0, self.number_of_tiles)
+        self.agent_position_idx = random.randint(0, self.number_of_tiles - 1)
         self.last_action = None
         return self.agent_position_idx
 

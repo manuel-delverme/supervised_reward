@@ -3,7 +3,7 @@ import deap.creator
 import deap.base
 import deap.tools
 import deap.algorithms
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import random
 
 
@@ -34,11 +34,11 @@ class EvolutionaryAlgorithm(object):
             self.toolbox.population(n=10), self.toolbox, cxpb=0.5, mutpb=0.2, ngen=10,
             stats=stats, halloffame=deap.tools.HallOfFame(1), verbose=True
         )
-        gen, avg, min_, max_ = logbook.select("gen", "avg", "min", "max")
-        plt.plot(gen, avg, label="average")
-        plt.plot(gen, min_, label="minimum")
-        plt.plot(gen, max_, label="maximum")
-        plt.xlabel("Generation")
-        plt.ylabel("Fitness")
-        plt.legend(loc="lower right")
-        plt.show()
+        # gen, avg, min_, max_ = logbook.select("gen", "avg", "min", "max")
+        # plt.plot(gen, avg, label="average")
+        # plt.plot(gen, min_, label="minimum")
+        # plt.plot(gen, max_, label="maximum")
+        # plt.xlabel("Generation")
+        # plt.ylabel("Fitness")
+        # plt.legend(loc="lower right")
+        # plt.show()

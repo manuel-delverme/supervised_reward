@@ -1,5 +1,6 @@
 import enum
 import envs.gridworld
+import envs.boxes
 import random
 import gym.spaces
 
@@ -12,15 +13,16 @@ class BoxWorldActions(enum.Enum):
     OPEN_BOX = 4
     EAT_FOOD = 5
 
-class BoxState(enum.Enum):
+
+class _BoxState(enum.Enum):
     CLOSED = 0
     HALF_OPEN = 1
     OPEN = 2
 
 
-class HungryThirsty(envs.gridworld.GridWorld):
-    def __init__(self, side_size, box_positions=(0, 5, 30, 35)):
-        super(HungryThirsty, self).__init__(
+class BoxWorld(envs.gridworld.GridWorld):
+    def __init__(self, side_size, box_positions=(0, 30)):
+        super(BoxWorld, self).__init__(
             side_size=side_size,
             terminal_states=(),
             base_transition_probability=0.9,
@@ -30,7 +32,7 @@ class HungryThirsty(envs.gridworld.GridWorld):
             'box': {},
         }
         for box_position in box_positions:
-            self._state['box'][box_position] = BoxState.CLOSED
+            self._state['box'][box_position] = _BoxState.CLOSED
         self.box_positions = box_positions
 
         extra_dof = len(self._state['box']) * 3 + 2
@@ -43,10 +45,17 @@ class HungryThirsty(envs.gridworld.GridWorld):
         terminal = False
         info = {}
 
-        in_a_box = self.agent_position_idx in self.box_positions
+        in_a_box = False
+        for box_pos in self.box_positions:
+            distance = box_pos - self.agent_position_idx
+            if distance in (-1, +1, -self.width, self.width):
+                in_which_box = box_pos
+                in_a_box = True
+                # MINIMUM BOX DISTANCE == 2 OR bugS
+                break
 
         if action == BoxWorldActions.EAT_FOOD:
-            if in_a_box and self._state['box'][self.agent_position_idx] == BoxState.HALF_OPEN:
+            if in_a_box and self._state['box'][in_which_box] == _BoxState.HALF_OPEN:
                 self._state['hungry'] = False
 
         elif action == BoxWorldActions.OPEN_BOX:
@@ -65,9 +74,14 @@ class HungryThirsty(envs.gridworld.GridWorld):
         return state_obj, reward, terminal, info
 
     def _hash_state(self):
-        state_hash = self.agent_position_idx
-        state_hash += self._state['hungry'] * self.number_of_tiles
-        state_hash += self._state['thirsty'] * self.number_of_tiles * 2
+        offset = 1
+        state_hash = self.agent_position_idx * offset
+        offset *= self.number_of_tiles
+        state_hash += self._state['hungry'] * offset
+        offset *= 2
+        for pos, state in self._state['box'].items():
+            state_hash += state.value * offset
+            offset *= 3
         return state_hash  # state.State(state_hash=state_hash, state_info=self._state.copy())
 
     def print_board(self, some_matrix=None, close=False, policy=None):
@@ -77,37 +91,35 @@ class HungryThirsty(envs.gridworld.GridWorld):
             self.gui = envs.gui.GUI(self.width)
         self.gui.print_board(
             player_position=self.agent_position_idx,
-            player_state=self._state,
             terminal_states=self.terminal_positions,
             walls=self._walls, boxes=self.boxes,
             some_matrix=some_matrix,
             policy=policy,
         )
 
+
 if __name__ == "__main__":
     import time
 
-    test_world = HungryThirsty(side_size=6, )
+    test_world = BoxWorld(side_size=6, )
     test_world.reset()
     test_world.render()
     time.sleep(0.2)
     test_world.teleport_agent(0)
     test_world.render()
     time.sleep(0.2)
-    sequence = [envs.gridworld.GridWorldActions.DOWN] * 6 + \
-               [envs.gridworld.GridWorldActions.RIGHT] * 6 + \
-               [envs.gridworld.GridWorldActions.UP] * 6 + \
-               [envs.gridworld.GridWorldActions.LEFT] * 6 + \
-               [envs.gridworld.GridWorldActions.EAT_FOOD] * 6 + \
-               [envs.gridworld.GridWorldActions.DRINK_WATER] * 6
+    sequence = [envs.boxes.BoxWorldActions.DOWN] * 6 + \
+               [envs.boxes.BoxWorldActions.RIGHT] * 6 + \
+               [envs.boxes.BoxWorldActions.UP] * 6 + \
+               [envs.boxes.BoxWorldActions.LEFT] * 6
 
     period = 1 / 60
     for action in sequence:
-        test_world.step(action)
+        test_world.step(action.value)
         test_world.render()
         time.sleep(period)
     while True:
-        action = random.choice(list(envs.gridworld.GridWorldActions))
-        test_world.step(action)
+        action = random.choice(list(envs.boxes.BoxWorldActions))
+        test_world.step(action.value)
         test_world.render()
         time.sleep(period)
