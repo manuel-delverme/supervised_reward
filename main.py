@@ -21,11 +21,8 @@ def main():
     # learner = learners.double_q_learning.QLearning(env=mdp)
     # options, cum_reward = learner.learn(steps_of_no_change=100, generate_options=False)
     # print(cum_reward)
-    learner = learners.double_q_learning.QLearning(env=mdp)
-    options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=70000)
-    options, cum_reward = learner.learn(max_steps=10000)
-    print(cum_reward)
-    return
+    # learner = learners.double_q_learning.QLearning(env=mdp)
+    # options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=70000)
 
 
     def fitness_hungry_thirsty(reward_vector):
@@ -67,8 +64,9 @@ def main():
             # thirst = _mdp._state['thirsty']
             hunger = _mdp._state['hungry']
 
-            box1 = _mdp._state['box'][0].value
-            box2 = _mdp._state['box'][5].value
+            box1_pos, box2_pos =_mdp.box_positions
+            box1 = _mdp._state['box'][box1_pos]
+            box2 = _mdp._state['box'][box2_pos]
             world_states = []
             for _box1 in envs.boxes._BoxState:
                 for _box2 in envs.boxes._BoxState:

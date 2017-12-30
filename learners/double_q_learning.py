@@ -79,14 +79,8 @@ class QLearning(object):
 
             if self.surrogate_reward is not None:
                 reward = self.surrogate_reward(self.environment)
-                cumulative_reward += reward
-            else:
-                if reward == 1:
-                    terminal = True
-                    reward = 10
-                    cumulative_reward += 1
-                else:
-                    cumulative_reward += reward
+
+            cumulative_reward += reward
 
             if is_option(action):
                 time_steps_under_option += 1
@@ -113,7 +107,8 @@ class QLearning(object):
                 if no_change > max_no_change and steps_of_no_change < max_steps:
                     self.epsilon = self.starting_epsilon * (1 - max_no_change / steps_of_no_change)
                     max_no_change = no_change
-                    print(steps, no_change)
+                    if steps % 10 == 0:
+                        print(steps, no_change)
 
                 # if steps % 1000 == 0:
                 #     render = 10
@@ -143,11 +138,11 @@ class QLearning(object):
                     self.Q2[:, -1] = self.Q2.mean(axis=1)
 
                 old_state = new_state
-        self.environment.print_board(
-            some_matrix=np.max(self.Q1 + self.Q2, axis=1),
-            policy=np.argmax(self.Q1 + self.Q2, axis=1),
-        )
-        time.sleep(5)
+        # self.environment.print_board(
+        #     some_matrix=np.max(self.Q1 + self.Q2, axis=1),
+        #     policy=np.argmax(self.Q1 + self.Q2, axis=1),
+        # )
+        # time.sleep(5)
         return self.available_actions[self.environment.action_space.n:], cumulative_reward
 
 
@@ -160,7 +155,7 @@ def is_terminate_option(skill, old_state):
     return skill[old_state] == -1
 
 
-# @disk_utils.disk_cache
+@disk_utils.disk_cache
 def learn_option(goal, mdp):
     print("generating policy for goal:", goal)
 
@@ -177,7 +172,7 @@ def learn_option(goal, mdp):
     # )
 
     learner = QLearning(env=mdp, options=None, epsilon=0.1, gamma=0.90, alpha=0.1, surrogate_reward=surrogate_reward)
-    _ = learner.learn(steps_of_no_change=100)
+    _ = learner.learn(steps_of_no_change=1000, max_steps=500000)
     option = np.argmax(learner.Q1 + learner.Q2, axis=1)
-    # option[goal] = -1
+    option[goal] = -1
     return option

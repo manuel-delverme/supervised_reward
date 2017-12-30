@@ -76,6 +76,7 @@ class BoxWorld(envs.gridworld.GridWorld):
 
         if not self._state['hungry']:
             reward = 1
+            terminal = True
         else:
             reward = -1
 
