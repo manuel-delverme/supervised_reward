@@ -8,8 +8,7 @@ import random
 
 
 class EvolutionaryAlgorithm(object):
-    def __init__(self, population_size, fitness_function):
-        reward_space_size = 4
+    def __init__(self, population_size, fitness_function, reward_space_size):
         deap.creator.create("FitnessMin", deap.base.Fitness, weights=(1,))
         deap.creator.create("Individual", list, fitness=deap.creator.FitnessMin)
         toolbox = deap.base.Toolbox()

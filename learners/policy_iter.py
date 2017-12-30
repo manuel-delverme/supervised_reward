@@ -1,7 +1,11 @@
 import numpy as np
+import collections
 import sys
 import time
 import disk_utils
+import random
+import math
+import numpy as np
 import random
 
 
@@ -109,7 +113,7 @@ class QLearning(object):
 
                 if render > 0:
                     render -= 1
-                    time.sleep(1/30)
+                    time.sleep(1 / 30)
                     self.environment.print_board(
                         some_matrix=np.max(self.Q1 + self.Q2, axis=1),
                         policy=np.argmax(self.Q1 + self.Q2, axis=1),
@@ -168,3 +172,99 @@ def learn_option(goal, mdp):
     option = np.argmax(learner.Q1 + learner.Q2, axis=1)
     option[goal] = -1
     return option
+
+
+class PolicyIteration(object):
+    def __init__(self, env, options=None, epsilon=0.1, gamma=0.90, alpha=0.1, surrogate_reward=None):
+        self.epsilon = epsilon
+        self.starting_epsilon = epsilon
+        self.gamma = gamma
+        self.alpha = alpha
+
+        self.environment = env
+        self.surrogate_reward = surrogate_reward
+        self.num_states = env.observation_space.n
+        self.available_actions = list(range(self.environment.action_space.n))
+        if options is not None:
+            self.available_actions.extend(options)
+
+        self.V = np.zeros(self.num_states)
+        self.pi = np.zeros(self.num_states, dtype=np.int)
+
+    def _evalPolicy(self):
+        delta = 0.0
+        # for s in range(self.V.shape[0]):
+        for s in range(self.num_states):
+            old_v = self.V[s]
+            action = self.available_actions[self.pi[s]]
+
+            self.environment.force_state(s)
+            nextState, nextReward, terminal, info = self.environment.step(action)
+            if self.surrogate_reward is not None:
+                nextReward = self.surrogate_reward(self.environment)
+
+            new_v = nextReward + self.gamma * self.V[nextState]
+            self.V[s] = new_v
+            # if nextState == 4:
+            #     print(self.V[s])
+            delta = max(delta, abs(old_v - new_v))
+        return delta
+
+    def _improvePolicy(self):
+        """ Policy improvement step. """
+        policy_stable = True
+        for s in range(self.num_states):
+            old_action = self.pi[s]
+            tempV = [0.0] * len(self.available_actions)
+            # I first get all value-function estimates
+            for i in range(len(self.available_actions)):
+
+                self.environment.force_state(s)
+                nextState, nextReward, terminal, info = self.environment.step(self.available_actions[i])
+                if self.surrogate_reward is not None:
+                    nextReward = self.surrogate_reward(self.environment)
+
+                tempV[i] = nextReward + self.gamma * self.V[nextState]
+
+            # Now I take the argmax
+            self.pi[s] = np.argmax(tempV)
+            # I break ties always choosing to terminate:
+            if math.fabs(tempV[self.pi[s]] - tempV[(len(self.available_actions) - 1)]) < 0.001:
+                self.pi[s] = (len(self.available_actions) - 1)
+            if old_action != self.pi[s]:
+                policy_stable = False
+
+        return policy_stable
+
+    def solvePolicyIteration(self, theta=0.001):
+        """ Implementation of Policy Iteration, as in the policy iteration pseudo-code presented in Sutton and Barto
+        (2016). """
+
+        policy_stable = False
+        history = collections.deque(maxlen=400)
+        for _ in range(400): history.append(0)
+        while not policy_stable:
+            # Policy evaluation
+            self.environment.print_board(some_matrix=self.V, policy=self.pi)
+            delta = self._evalPolicy()
+            self.environment.print_board(some_matrix=self.V, policy=self.pi)
+            it = 0
+            while theta < delta or it > 1000:
+                delta = self._evalPolicy()
+                it += 1
+                print(it, sum(history)/len(history))
+                history.append(delta)
+                if random.random() < 0.1:
+                    self.environment.print_board(some_matrix=self.V, policy=self.pi)
+
+            # Policy improvement
+            policy_stable = self._improvePolicy()
+            self.environment.print_board(some_matrix=self.V, policy=self.pi)
+        return self.V, self.pi
+
+    def learn(self, goal, steps_of_no_change=None):
+        V, pi = self.solvePolicyIteration()
+
+        # I'll assign the goal as the termination action
+        pi[goal] = -1
+        return pi

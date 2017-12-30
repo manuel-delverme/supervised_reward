@@ -42,12 +42,11 @@ class HungryThirsty(envs.gridworld.GridWorld):
 
     def _step(self, action):
         action = HungryThirstyActions(action)
-        self._state['hungry'] = True
         terminal = False
         info = {}
-
         if random.random() < 0.1:
             self._state['thirsty'] = True
+        self._state['hungry'] = True
 
         if action == HungryThirstyActions.EAT_FOOD:
             if self.agent_position_idx == self.food_position and not self._state['thirsty']:
@@ -63,6 +62,7 @@ class HungryThirsty(envs.gridworld.GridWorld):
         reward = -1
         if not self._state['hungry']:
             reward = 1
+
         # else:
         #     reward += -1
 
@@ -99,6 +99,27 @@ class HungryThirsty(envs.gridworld.GridWorld):
             hungry=True,
             thirsty=True,
         )
+
+    def force_state(self, state):
+        position, state_dict = self._decode_state(state)
+        self._state = state_dict
+        super(HungryThirsty, self).teleport_agent(position)
+
+    def _decode_state(self, state_hash):
+        # state = pos + hungry * tiles + thirsty * tiles * 2
+        state_dict = {}
+        if state_hash >= self.number_of_tiles * 2:
+            state_hash -= self.number_of_tiles * 2
+            state_dict['thirsty'] = True
+        else:
+            state_dict['thirsty'] = False
+
+        if state_hash >= self.number_of_tiles:
+            state_dict['hungry'] = True
+            state_hash -= self.number_of_tiles
+        elif state_hash < self.number_of_tiles:
+            state_dict['hungry'] = False
+        return state_hash, state_dict
 
 
 if __name__ == "__main__":

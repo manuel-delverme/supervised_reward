@@ -1,12 +1,14 @@
 import numpy as np
+import learners.policy_iter
 import sys
 import time
 import disk_utils
+import envs.boxes
 import random
 
 
 class QLearning(object):
-    def __init__(self, env, options=None, epsilon=0.1, gamma=0.90, alpha=0.1, surrogate_reward=None):
+    def __init__(self, env, options=None, epsilon=0.1, gamma=0.90, alpha=0.3, surrogate_reward=None):
         self.epsilon = epsilon
         self.starting_epsilon = epsilon
         self.gamma = gamma
@@ -65,6 +67,11 @@ class QLearning(object):
 
             if terminal:
                 old_state = self.environment.reset()
+            # q_tot = self.Q1 + self.Q2
+            # self.environment.print_board(
+            #     some_matrix=np.max(q_tot, axis=1),
+            #     policy=np.argmax(q_tot, axis=1),
+            # )
 
             action, primitive_action = self.pick_action(old_state)
             steps += 1
@@ -72,10 +79,14 @@ class QLearning(object):
 
             if self.surrogate_reward is not None:
                 reward = self.surrogate_reward(self.environment)
+                cumulative_reward += reward
             else:
                 if reward == 1:
                     terminal = True
-            cumulative_reward += reward
+                    reward = 10
+                    cumulative_reward += 1
+                else:
+                    cumulative_reward += reward
 
             if is_option(action):
                 time_steps_under_option += 1
@@ -104,8 +115,8 @@ class QLearning(object):
                     max_no_change = no_change
                     print(steps, no_change)
 
-                if steps % 100000 == 0:
-                    render = 50
+                # if steps % 1000 == 0:
+                #     render = 10
 
                 if render > 0:
                     render -= 1
@@ -156,15 +167,17 @@ def learn_option(goal, mdp):
     def surrogate_reward(_mdp):
         return 1 if goal == _mdp._hash_state() else -1
 
-    learner = QLearning(
-        env=mdp,
-        options=None,
-        epsilon=0.1,
-        gamma=0.90,
-        alpha=0.1,
-        surrogate_reward=surrogate_reward
-    )
-    _, _ = learner.learn(steps_of_no_change=100)
+    # learner = learners.policy_iter.PolicyIteration(
+    #     env=mdp,
+    #     options=None,
+    #     epsilon=0.1,
+    #     gamma=0.90,
+    #     alpha=0.1,
+    #     surrogate_reward=surrogate_reward,
+    # )
+
+    learner = QLearning(env=mdp, options=None, epsilon=0.1, gamma=0.90, alpha=0.1, surrogate_reward=surrogate_reward)
+    _ = learner.learn(steps_of_no_change=100)
     option = np.argmax(learner.Q1 + learner.Q2, axis=1)
-    option[goal] = -1
+    # option[goal] = -1
     return option
