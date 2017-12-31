@@ -81,14 +81,22 @@ class QLearning(object):
         max_no_change = 0
         render = 0
         option_goals = set()
-        old_states = collections.deque(range(20), maxlen=20)
+        old_states = collections.deque(maxlen=20)
 
         for step in range(max_steps):
+            # if step % (max_steps/10) == 0:
+            #     render = 50
             if terminal:
                 old_state = self.environment.reset()
 
             old_states.append(old_state)
-            kill_option = not len(set(old_states)) > 4
+            if len(old_states) == 20 and len(set(old_states)) < 4 and is_option(action):
+                kill_option = True
+                print("killed at:", time_steps_under_option)
+                old_states.clear()
+            else:
+                kill_option = False
+
             action, primitive_action = self.pick_action(old_state, kill_option)
 
             # if old_pick == primitive_action:
@@ -110,6 +118,9 @@ class QLearning(object):
 
             if is_option(action) and (self.previous_action == action).all():
                 time_steps_under_option += 1
+                if self.test_run:
+                    render = 5
+                    print(time_steps_under_option)
             else:
                 Q, q = (self.Q1, self.Q2) if random.random() > 0.5 else (self.Q2, self.Q1)
 
@@ -126,14 +137,20 @@ class QLearning(object):
                 else:
                     no_change = 0
 
-                # render = self.render_board(step, render)
                 if generate_options and delta_Q > 1 and self.environment.agent_position_idx not in option_goals:
-                    option_goals.add(self.generate_option())
+                    for cheat_pos in {0, 5, 30, 35}.difference(option_goals):
+                        self.environment.teleport_agent(cheat_pos)
+                        option_goals.add(self.generate_option())
+                        break
+                    # else:
+                    #     option_goals.add(self.generate_option())
 
                 if steps_of_no_change is not None and no_change > max_no_change:
                     max_no_change = no_change
                     if plot_progress and self.learning_option:
                         progress_bar.update(1)
+
+            render = self.render_board(render)
             old_state = new_state
 
             if plot_progress and (self.train_run or self.test_run):
@@ -146,10 +163,7 @@ class QLearning(object):
             # print("max step, break")
         return self.available_actions[self.environment.action_space.n:], cumulative_reward
 
-    def render_board(self, steps, render):
-        if steps % 5000 == 0:
-            render = 50
-
+    def render_board(self, render):
         if render > 0:
             render -= 1
             time.sleep(1 / 30)
@@ -157,10 +171,14 @@ class QLearning(object):
                 some_matrix=np.max(self.Q1 + self.Q2, axis=1),
                 policy=np.argmax(self.Q1 + self.Q2, axis=1),
             )
+            if render == 0:
+                input("sleeping")
         return render
 
     def generate_option(self):
         new_option = learn_option(self.environment.agent_position_idx, self.environment)
+        # TODO: remove this is a bugfix against the cached version
+        new_option[self.environment.agent_position_idx] = -1
         # new_option = learn_option(old_state, self.environment)
         self.available_actions.append(new_option)
         option_idx = self.Q1.shape[1] + 1
@@ -190,7 +208,7 @@ def learn_option(goal, mdp):
 
     def surrogate_reward(_mdp):
         # return 1 if goal == _mdp._hash_state() else -1
-        return 10 if goal == _mdp.agent_position_idx else -1
+        return 1000 if goal == _mdp.agent_position_idx else -1
 
     # learner = learners.policy_iter.PolicyIteration(
     #     env=mdp,
@@ -205,14 +223,14 @@ def learn_option(goal, mdp):
         env=mdp, options=None, epsilon=0.1, gamma=0.90, alpha=0.1, surrogate_reward=surrogate_reward,
         learning_option=True
     )
-    _ = learner.learn(steps_of_no_change=10, max_steps=100000)
+    _ = learner.learn(steps_of_no_change=10, max_steps=1000000)
     option = np.argmax(learner.Q1 + learner.Q2, axis=1)
 
     state_idx = goal
     try:
         while True:
-            state_idx += mdp.number_of_tiles
             option[state_idx] = -1
+            state_idx += mdp.number_of_tiles
     except IndexError as e:
         pass
     mdp.print_board(

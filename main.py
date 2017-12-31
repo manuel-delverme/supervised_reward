@@ -23,7 +23,6 @@ def main():
     # learner = learners.double_q_learning.QLearning(env=mdp)
     # options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=70000)
 
-
     def fitness_hungry_thirsty(reward_vector):
         mdp = envs.hungry_thirsty.HungryThirsty(side_size=6, water_position=0, food_position=5)
 
@@ -64,7 +63,7 @@ def main():
             # thirst = _mdp._state['thirsty']
             hunger = _mdp._state['hungry']
 
-            box1_pos, box2_pos =_mdp.box_positions
+            box1_pos, box2_pos = _mdp.box_positions
             box1 = _mdp._state['box'][box1_pos]
             box2 = _mdp._state['box'][box2_pos]
             world_states = []
@@ -81,14 +80,20 @@ def main():
             # return np.dot(reward_vector, x)
             return reward_vector[_idx]
 
-        learner = learners.double_q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function, train_run=True)
-        options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=10000, generate_options=True, plot_progress=False)
+        learner = learners.double_q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function,
+                                                       train_run=True)
+        options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=10000, generate_options=True,
+                                            plot_progress=False)
+        for idx, option in enumerate(options):
+            print(np.argwhere(option == -1))
+            mdp.print_board(policy=option)
+            input()
 
         # eval options
         cum_cum_reward = []
         possible_box_positions = itertools.combinations([0, 5, 30, 35], 2)
         num_of_test_samples = 0
-        for eval_step, box_positions in tqdm.tqdm(enumerate(possible_box_positions)):
+        for eval_step, box_positions in tqdm.tqdm(enumerate(possible_box_positions), total=6):
             # avoid test on train
             if training_sample == box_positions:
                 continue
@@ -100,8 +105,8 @@ def main():
             num_of_test_samples += 1
 
         fitness = sum(cum_cum_reward) / num_of_test_samples
-        print("test scores: {} {}".format(fitness, cum_cum_reward))
-        print("found {} options from {}".format(len(options), np.around(reward_vector, decimals=4)))
+        print("score:\t{0}\toptions:\t{2}\t{1}\t{3}".format(fitness, cum_cum_reward, len(options),
+                                                            np.around(reward_vector, decimals=4)))
         # history.append(fitness)
         return fitness,
 
