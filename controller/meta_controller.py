@@ -12,7 +12,7 @@ class EvolutionaryAlgorithm(object):
         deap.creator.create("FitnessMin", deap.base.Fitness, weights=(1,))
         deap.creator.create("Individual", list, fitness=deap.creator.FitnessMin)
         toolbox = deap.base.Toolbox()
-        toolbox.register("attribute", lambda: random.random() + 0.5)
+        toolbox.register("attribute", lambda: random.random() - 0.5)
         toolbox.register("individual", deap.tools.initRepeat, deap.creator.Individual, toolbox.attribute, n=reward_space_size)
         toolbox.register("population", deap.tools.initRepeat, list, toolbox.individual)
 
@@ -33,11 +33,11 @@ class EvolutionaryAlgorithm(object):
             self.toolbox.population(n=10), self.toolbox, cxpb=0.5, mutpb=0.2, ngen=10,
             stats=stats, halloffame=deap.tools.HallOfFame(1), verbose=True
         )
-        # gen, avg, min_, max_ = logbook.select("gen", "avg", "min", "max")
-        # plt.plot(gen, avg, label="average")
-        # plt.plot(gen, min_, label="minimum")
-        # plt.plot(gen, max_, label="maximum")
-        # plt.xlabel("Generation")
-        # plt.ylabel("Fitness")
-        # plt.legend(loc="lower right")
-        # plt.show()
+        gen, avg, min_, max_ = logbook.select("gen", "avg", "min", "max")
+        plt.plot(gen, avg, label="average")
+        plt.plot(gen, min_, label="minimum")
+        plt.plot(gen, max_, label="maximum")
+        plt.xlabel("Generation")
+        plt.ylabel("Fitness")
+        plt.legend(loc="lower right")
+        plt.show()

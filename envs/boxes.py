@@ -105,7 +105,7 @@ class BoxWorld(envs.gridworld.GridWorld):
             thirsty=False,  # there is no thirsty in boxes
             hungry=True,
             some_matrix=some_matrix,
-            # policy=policy,
+            policy=policy,
         )
 
 
