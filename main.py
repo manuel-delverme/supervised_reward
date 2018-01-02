@@ -1,4 +1,7 @@
 import learners.double_q_learning
+import random
+import scipy.interpolate
+import matplotlib.pyplot as plt
 import controller.meta_controller
 import envs.hungry_thirsty
 import envs.boxes
@@ -56,7 +59,11 @@ def main():
         return fitness,
 
     def fitness_boxes(reward_vector):
-        training_sample = (0, 5)
+        possible_box_positions = list(itertools.combinations([0, 5, 30, 35], 2))
+        random.shuffle(possible_box_positions)
+        possible_box_positions = (p for p in possible_box_positions)
+
+        training_sample = next(possible_box_positions)
         mdp = envs.boxes.BoxWorld(side_size=6, box_positions=training_sample)
 
         def intrinsic_reward_function(_mdp):
@@ -84,33 +91,47 @@ def main():
                                                        train_run=True)
         options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=10000, generate_options=True,
                                             plot_progress=False)
-        for idx, option in enumerate(options):
-            print(np.argwhere(option == -1))
-            mdp.print_board(policy=option)
-            input()
+        # for idx, option in enumerate(options):
+        #     print(np.argwhere(option == -1))
+        #     mdp.print_board(policy=option)
+        #     input()
 
         # eval options
-        cum_cum_reward = []
-        possible_box_positions = itertools.combinations([0, 5, 30, 35], 2)
+        cum_cum_reward = 0
         num_of_test_samples = 0
-        for eval_step, box_positions in tqdm.tqdm(enumerate(possible_box_positions), total=6):
-            # avoid test on train
-            if training_sample == box_positions:
-                continue
-
+        # for eval_step, box_positions in tqdm.tqdm(enumerate(possible_box_positions), total=6):
+        for eval_step, box_positions in enumerate(possible_box_positions):
             mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
             learner = learners.double_q_learning.QLearning(env=mdp, options=options, test_run=True)
-            _, cum_reward = learner.learn(max_steps=10000, generate_options=False, plot_progress=False)
-            cum_cum_reward += [cum_reward]
+            _, _ = learner.learn(max_steps=2000, generate_options=False, plot_progress=False)
+
+            # # fit with np.polyfit
+            # xs = range(len(rewards))
+            # m, b = np.polyfit(xs, rewards, 1)
+            # plt.plot(rewards, '-', label="option")
+            # plt.plot(xs, m * xs + b, '-')
+
+            # mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
+            # learner = learners.double_q_learning.QLearning(env=mdp, options=[], test_run=True)
+            # _, rewards = learner.learn(max_steps=5000, generate_options=False, plot_progress=False)
+            # plt.plot(rewards, label="vanilla")
+            cum_reward = learner.test()
+            cum_cum_reward += cum_reward
             num_of_test_samples += 1
+            # plt.legend(loc="lower right")
+            # plt.show()
 
-        fitness = sum(cum_cum_reward) / num_of_test_samples
-        print("score:\t{0}\toptions:\t{2}\t{1}\t{3}".format(fitness, cum_cum_reward, len(options),
-                                                            np.around(reward_vector, decimals=4)))
+        fitness = cum_cum_reward / num_of_test_samples
+        option_names = []
+        for option in options:
+            option_names.append(int(np.argwhere(option == -1)[0]))
+        option_names = " ".join(str(n) for n in sorted(option_names))
+
+        print("score:\t{}\toptions: {}\t{}".format(fitness, len(options), option_names))
         # history.append(fitness)
-        return fitness,
+        return fitness
 
-    regressor = controller.meta_controller.EvolutionaryAlgorithm(
+    regressor = controller.meta_controller.CMAES(
         population_size=POPULATION_SIZE,
         fitness_function=fitness_boxes,
         reward_space_size=8,

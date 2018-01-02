@@ -3,7 +3,10 @@ import deap.creator
 import deap.base
 import deap.tools
 import deap.algorithms
-# import matplotlib.pyplot as plt
+
+import cma
+import es
+
 import random
 
 
@@ -13,7 +16,8 @@ class EvolutionaryAlgorithm(object):
         deap.creator.create("Individual", list, fitness=deap.creator.FitnessMin)
         toolbox = deap.base.Toolbox()
         toolbox.register("attribute", lambda: random.random() - 0.5)
-        toolbox.register("individual", deap.tools.initRepeat, deap.creator.Individual, toolbox.attribute, n=reward_space_size)
+        toolbox.register("individual", deap.tools.initRepeat, deap.creator.Individual, toolbox.attribute,
+                         n=reward_space_size)
         toolbox.register("population", deap.tools.initRepeat, list, toolbox.individual)
 
         toolbox.register("mate", deap.tools.cxTwoPoint)
@@ -34,6 +38,7 @@ class EvolutionaryAlgorithm(object):
             stats=stats, halloffame=deap.tools.HallOfFame(1), verbose=True
         )
         gen, avg, min_, max_ = logbook.select("gen", "avg", "min", "max")
+        import matplotlib.pyplot as plt
         plt.plot(gen, avg, label="average")
         plt.plot(gen, min_, label="minimum")
         plt.plot(gen, max_, label="maximum")
@@ -41,3 +46,32 @@ class EvolutionaryAlgorithm(object):
         plt.ylabel("Fitness")
         plt.legend(loc="lower right")
         plt.show()
+
+
+class CMAES(object):
+    def __init__(self, reward_space_size, population_size, fitness_function, weight_decay=0.0, sigma_init=0.5):
+        self.solver = es.CMAES(
+            reward_space_size,
+            popsize=population_size,
+            weight_decay=0.0,
+            sigma_init=0.5
+        )
+        self.fitness_function = fitness_function
+
+    def optimize(self):
+        history = []
+        while True:
+            solutions = self.solver.ask()
+            fitness_list = []
+            for solution in solutions:
+                fitness = self.fitness_function(solution)
+                fitness_list.append(fitness)
+            self.solver.tell(solutions, fitness_list)
+            # history.append(self.solver.result.fbest)
+            print("best", str(self.solver.result.xbest).replace("\n", " "), "fitness", self.solver.result.fbest)
+            # es.logger.add()  # write data to disc to be plotted
+            # es.disp()
+            # es.result_pretty()
+            # cma.plot()  # shortcut for es.logger.plot()
+
+        return history

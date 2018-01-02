@@ -55,7 +55,7 @@ class GUI(object):
         self.player_xy = [(self.width - 2), 0, 0]
 
     def print_board(self, player_position=None, terminal_states=(), some_matrix=None, policy=None, goals=None,
-                    walls={}, boxes=(), hungry=True, thirsty=True):
+                    walls={}, boxes=(), hungry=False, thirsty=False, highlight_square=None):
 
         font = pygame.font.SysFont("monospace", 15)
         policy_font = pygame.font.SysFont("monospace", 50)
@@ -76,15 +76,20 @@ class GUI(object):
             state_hash = tile_idx + slice_start
             x = tile_idx % self.width
             y = tile_idx // self.width
-            if tile_idx == player_position:
-                square_icon = self.icon[self._PLAYER_ICON]
-            elif policy is not None:
+            icon_x = x * self.tile_size + 10
+            icon_y = y * self.tile_size
+
+            if policy is not None:
                 policy_act = policy[state_hash]
                 try:
                     square_icon = self.icon[policy_act]
                 except KeyError:
                     self.icon[policy_act] = policy_font.render(str(policy_act), 1, (255, 255, 0))
                     square_icon = self.icon[policy_act]
+                self.screen.blit(square_icon, (icon_x, icon_y + self.tile_size/2))
+
+            if tile_idx == player_position:
+                square_icon = self.icon[self._PLAYER_ICON]
             # elif tile_idx == player_position:
             #     square_icon = self._PLAYER_ICON
             elif tile_idx in terminal_states:
@@ -96,9 +101,8 @@ class GUI(object):
             if goals is not None and tile_idx in goals:
                 square_icon = self.icon[self._HEALTH_ICON]
 
-            icon_x = x * self.tile_size + 10
-            icon_y = y * self.tile_size
-
+            if highlight_square is not None and highlight_square % num_of_tiles == tile_idx:
+                pygame.draw.rect(self.screen, (255, 255, 0), [icon_x, icon_y, self.tile_size, self.tile_size])
             if square_icon:
                 self.screen.blit(square_icon, (icon_x, icon_y))
 
@@ -126,12 +130,12 @@ class GUI(object):
 
                 # color = (value, 255, 0)
                 value = 0
-                for offset in range(0, 4):
+                for offset in range(0, some_matrix.shape[0] // num_of_tiles):
                     value_idx = tile_idx + offset * num_of_tiles
                     value += some_matrix[value_idx]
                     # value = "{1}[{0}]".format(value_idx, value)
 
-                value = str(round(value / 4, 2))
+                value = str(round(value / (some_matrix.shape[0] // num_of_tiles), 2))
 
                 if value_idx == state_hash:
                     text = font.render(value, 2, red)
@@ -143,7 +147,7 @@ class GUI(object):
                 if offset > 1:
                     offset = offset - 2
                     offset_x = 1
-                self.screen.blit(text, (icon_x - 5 + self.tile_size / 2 * offset_x, icon_y + self.tile_size - 20 - 11 * offset))
+                self.screen.blit(text, (icon_x - 5 + self.tile_size / 2 * offset_x, int(icon_y + self.tile_size * 3 / 4)))
 
             black = (0, 0, 0)
             for offset in range(0, 2):

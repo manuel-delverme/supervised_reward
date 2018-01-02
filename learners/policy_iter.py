@@ -243,11 +243,12 @@ class PolicyIteration(object):
         policy_stable = False
         history = collections.deque(maxlen=400)
         for _ in range(400): history.append(0)
+
         while not policy_stable:
             # Policy evaluation
             self.environment.print_board(some_matrix=self.V, policy=self.pi)
             delta = self._evalPolicy()
-            self.environment.print_board(some_matrix=self.V, policy=self.pi)
+            # self.environment.print_board(some_matrix=self.V, policy=self.pi)
             it = 0
             while theta < delta or it > 1000:
                 delta = self._evalPolicy()

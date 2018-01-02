@@ -75,7 +75,7 @@ class BoxWorld(envs.gridworld.GridWorld):
         state_obj = self._hash_state()
 
         if not self._state['hungry']:
-            reward = 1
+            reward = 100
             terminal = True
         else:
             reward = -1
@@ -93,7 +93,7 @@ class BoxWorld(envs.gridworld.GridWorld):
             offset *= len(_BoxState)
         return state_hash  # state.State(state_hash=state_hash, state_info=self._state.copy())
 
-    def print_board(self, some_matrix=None, close=False, policy=None):
+    def print_board(self, some_matrix=None, close=False, policy=None, highlight_square=None):
         if close:
             return
         if self.gui is None:
@@ -101,13 +101,18 @@ class BoxWorld(envs.gridworld.GridWorld):
         self.gui.print_board(
             player_position=self.agent_position_idx,
             terminal_states=self.terminal_positions,
-            walls=self._walls, boxes=self.box_positions,
+            boxes=self.box_positions,
+            walls=self._walls,
             thirsty=False,  # there is no thirsty in boxes
             hungry=True,
             some_matrix=some_matrix,
             policy=policy,
+            highlight_square=highlight_square,
         )
 
+    def force_state(self, state):
+        #TODO: remove, will cause bugs
+        super(BoxWorld, self).teleport_agent(state % self.num_tiles)
 
 if __name__ == "__main__":
     import time

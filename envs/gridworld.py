@@ -38,7 +38,7 @@ class GridWorld(discrete.DiscreteEnv):
                 _walls[vi] = []
             _walls[vi].append(k)
 
-    def __init__(self, side_size, terminal_states, base_transition_probability=1.0):
+    def __init__(self, side_size, terminal_states, start_from_borders=False, base_transition_probability=1.0):
         self.height = side_size
         self.width = side_size
         self.num_tiles = side_size * side_size
@@ -54,7 +54,8 @@ class GridWorld(discrete.DiscreteEnv):
 
         # Initial state distribution is uniform
         initial_state_distribution = np.ones(self.num_tiles)
-        initial_state_distribution[[
+        if start_from_borders:
+            initial_state_distribution[[
                 0, 1, 2, 3, 4, 5,
                 6, 11,
                 12, 12 + 5,
@@ -62,6 +63,7 @@ class GridWorld(discrete.DiscreteEnv):
                 24, 24 + 5,
                 30, 31, 32, 33, 34, 35
             ]] = 2
+            initial_state_distribution -= 1
 
         initial_state_distribution /= initial_state_distribution.sum()
 
@@ -131,7 +133,7 @@ class GridWorld(discrete.DiscreteEnv):
         self.gui.print_board(
             player_position=self.agent_position_idx,
             terminal_states=self.terminal_positions,
-            walls=self._walls, boxes=self.boxes,
+            walls=self._walls,
             some_matrix=some_matrix,
             policy=policy,
         )
