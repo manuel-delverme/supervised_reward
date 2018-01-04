@@ -114,7 +114,7 @@ class QLearning(object):
                 if render > 0:
                     render -= 1
                     time.sleep(1 / 30)
-                    self.environment.print_board(
+                    self.environment.render_board(
                         some_matrix=np.max(self.Q1 + self.Q2, axis=1),
                         policy=np.argmax(self.Q1 + self.Q2, axis=1),
                     )
@@ -136,7 +136,7 @@ class QLearning(object):
                     self.Q2[:, -1] = self.Q2.mean(axis=1)
 
                 old_state = new_state
-        self.environment.print_board(
+        self.environment.render_board(
             some_matrix=np.max(self.Q1 + self.Q2, axis=1),
             policy=np.argmax(self.Q1 + self.Q2, axis=1),
         )
@@ -246,7 +246,7 @@ class PolicyIteration(object):
 
         while not policy_stable:
             # Policy evaluation
-            self.environment.print_board(some_matrix=self.V, policy=self.pi)
+            self.environment.render_board(some_matrix=self.V, policy=self.pi)
             delta = self._evalPolicy()
             # self.environment.print_board(some_matrix=self.V, policy=self.pi)
             it = 0
@@ -256,11 +256,11 @@ class PolicyIteration(object):
                 print(it, sum(history)/len(history))
                 history.append(delta)
                 if random.random() < 0.1:
-                    self.environment.print_board(some_matrix=self.V, policy=self.pi)
+                    self.environment.render_board(some_matrix=self.V, policy=self.pi)
 
             # Policy improvement
             policy_stable = self._improvePolicy()
-            self.environment.print_board(some_matrix=self.V, policy=self.pi)
+            self.environment.render_board(some_matrix=self.V, policy=self.pi)
         return self.V, self.pi
 
     def learn(self, goal, steps_of_no_change=None):

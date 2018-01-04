@@ -14,9 +14,9 @@ class BoxWorldActions(enum.Enum):
 
 
 class _BoxState(enum.Enum):
-    CLOSED = 0
+    OPEN = 0
     HALF_OPEN = 1
-    OPEN = 1
+    CLOSED = 2
 
 
 class BoxWorld(envs.gridworld.GridWorld):
@@ -27,16 +27,16 @@ class BoxWorld(envs.gridworld.GridWorld):
             base_transition_probability=0.9,
         )
         self._state = {
-            'hungry': True,
+            'hungry': random.choice((True, False)),
             'box': {},
         }
         for box_position in box_positions:
-            self._state['box'][box_position] = _BoxState.CLOSED
+            self._state['box'][box_position] = random.choice(list(_BoxState))
         self.box_positions = box_positions
 
-        extra_dof = len(self._state['box']) * len(_BoxState) * 2  # box states and 2 for hungry in True, False
+        extra_dof = (len(_BoxState) ** len(self._state['box'])) * 2  # box states and 2 for hungry in True, False
         self.observation_space = gym.spaces.Discrete(self.observation_space.n * extra_dof)
-        self.action_space = gym.spaces.Discrete(self.action_space.n + len(self._state))
+        self.action_space = gym.spaces.Discrete(len(BoxWorldActions))
 
     def _step(self, action):
         action = BoxWorldActions(action)
@@ -47,36 +47,41 @@ class BoxWorld(envs.gridworld.GridWorld):
         in_a_box = False
         for box_pos in self.box_positions:
             distance = box_pos - self.agent_position_idx
-            if distance in (0, -1, +1, -self.width, self.width):
+            if distance == 0:
                 in_which_box = box_pos
                 in_a_box = True
-                # MINIMUM BOX DISTANCE == 2 OR bugS
-                break
 
-        # boxes stay half open only for a timestep
-        for box_pos in self.box_positions:
-            if self._state['box'][box_pos] == _BoxState.HALF_OPEN:
-                self._state['box'][box_pos] = _BoxState.OPEN
+            # if distance in (0, -1, +1, -self.width, self.width):
+            #     in_which_box = box_pos
+            #     in_a_box = True
+            #     # MINIMUM BOX DISTANCE == 2 OR bugS
+            #     break
+
+        if action == BoxWorldActions.EAT_FOOD:
+            if in_a_box and self._state['box'][in_which_box] == _BoxState.HALF_OPEN:
+                self._state['hungry'] = False
 
         # open boxes randomly close
         for box_pos in self.box_positions:
             if random.random() < 0.1 and self._state['box'][box_pos] == _BoxState.OPEN:
                 self._state['box'][box_pos] = _BoxState.CLOSED
 
-        if action == BoxWorldActions.EAT_FOOD:
-            if in_a_box and self._state['box'][in_which_box] == _BoxState.HALF_OPEN:
-                self._state['hungry'] = False
-        elif action == BoxWorldActions.OPEN_BOX:
+        # boxes stay half open only for a timestep
+        for box_pos in self.box_positions:
+            if self._state['box'][box_pos] == _BoxState.HALF_OPEN:
+                self._state['box'][box_pos] = _BoxState.OPEN
+
+        if action == BoxWorldActions.OPEN_BOX:
             if in_a_box:
                 self._state['box'][in_which_box] = _BoxState.HALF_OPEN
-        else:
+
+        if action not in (BoxWorldActions.OPEN_BOX, BoxWorldActions.EAT_FOOD):
             tile_idx, reward, terminal, info = super(envs.gridworld.GridWorld, self)._step(action.value)
 
         state_obj = self._hash_state()
 
         if not self._state['hungry']:
             reward = 100
-            terminal = True
         else:
             reward = -1
 
@@ -93,26 +98,37 @@ class BoxWorld(envs.gridworld.GridWorld):
             offset *= len(_BoxState)
         return state_hash  # state.State(state_hash=state_hash, state_info=self._state.copy())
 
-    def print_board(self, some_matrix=None, close=False, policy=None, highlight_square=None):
+    def reset(self):
+        super(BoxWorld, self).reset()
+        self._state['hungry'] = random.choice((True, False))
+        for pos in self._state['box'].keys():
+            self._state['box'][pos] = random.choice(list(_BoxState))
+        return self._hash_state()
+
+    def show_board(self, some_matrix=None, close=False, policy=None, highlight_square=None):
         if close:
             return
         if self.gui is None:
             self.gui = envs.gui.GUI(self.width)
-        self.gui.print_board(
+        info = self._state.copy()
+        self.gui.render_board(
             player_position=self.agent_position_idx,
             terminal_states=self.terminal_positions,
-            boxes=self.box_positions,
+            boxes=self._state['box'],
             walls=self._walls,
             thirsty=False,  # there is no thirsty in boxes
             hungry=True,
             some_matrix=some_matrix,
             policy=policy,
             highlight_square=highlight_square,
+            info=info,
+            state_offset=self.num_tiles * (self._hash_state() // self.num_tiles)
         )
 
     def force_state(self, state):
-        #TODO: remove, will cause bugs
+        # TODO: remove, will cause bugs
         super(BoxWorld, self).teleport_agent(state % self.num_tiles)
+
 
 if __name__ == "__main__":
     import time

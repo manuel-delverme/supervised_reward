@@ -82,7 +82,7 @@ class QLearning(object):
             action_id = self.action_to_id[action]
         return action, primitive_action, action_id
 
-    def learn(self, steps_of_no_change=None, generate_options=False, max_steps=None, plot_progress=True):
+    def learn(self, steps_of_no_change=None, generate_options=False, max_steps=None, plot_progress=False):
         assert (steps_of_no_change is not None or max_steps is not None)
 
         if plot_progress:
@@ -119,7 +119,7 @@ class QLearning(object):
                 kill_option = True
                 print("killed at:", time_steps_under_option, "\n", np.argwhere(action == -1))
                 print(old_states, "\n", old_actions)
-                self.environment.print_board(policy=action)
+                self.environment.render_board(policy=action)
                 input()
                 old_states.clear()
             else:
@@ -154,7 +154,7 @@ class QLearning(object):
                 cumulative_reward += reward
                 # cumulative_rewards.append(cumulative_reward)
 
-            if False and self.test_run:  # and time_steps_under_option == 1:
+            if False and self.test_run and len(self.available_actions) < 11:  # and time_steps_under_option == 1:
                 render = 2
                 if is_option(action):
                     if primitive_action == -1:
@@ -167,7 +167,7 @@ class QLearning(object):
                     highlight_square = target
                 else:
                     print(step, "pos", self.environment.agent_position_idx, "act", envs.boxes.BoxWorldActions(action),
-                          self.Q1[old_state, action_idx])
+                         self.Q1[old_state, action_idx])
                     highlight_square = new_state
             else:
                 highlight_square = None
@@ -238,7 +238,7 @@ class QLearning(object):
         if render > 0:
             render -= 1
             time.sleep(1 / 30)
-            self.environment.print_board(
+            self.environment.show_board(
                 some_matrix=np.sum(self.Q1 + self.Q2, axis=1),
                 policy=np.argmax(self.Q1 + self.Q2, axis=1),
                 highlight_square=highlight_square,
@@ -248,11 +248,16 @@ class QLearning(object):
         return render
 
     def generate_option(self):
-        for goal in range(self.environment.number_of_tiles):
-            _ = learn_option(goal, self.environment)
-
         goal = self.environment.agent_position_idx
         new_option = learn_option(goal, self.environment)
+
+        # TODO: REMOVE HACK
+        if new_option.shape[0] < self.environment.observation_space.n:
+            # TODO: remove print("OPTION SIZE MISMATCH, TILING")
+            new_option = np.tile(
+                new_option[:self.environment.number_of_tiles],
+                self.environment.observation_space.n // self.environment.number_of_tiles
+            )
 
         new_option.flags.writeable = False
         # new_option = learn_option(old_state, self.environment)

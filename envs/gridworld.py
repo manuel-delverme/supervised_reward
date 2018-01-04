@@ -119,7 +119,7 @@ class GridWorld(discrete.DiscreteEnv):
             return
         if self.gui is None:
             self.gui = envs.gui.GUI(width=self.width)
-        self.gui.print_board(
+        self.gui.render_board(
             player_position=self.agent_position_idx,
             terminal_states=self.terminal_positions,
             walls=self._walls, boxes=self.boxes
@@ -130,7 +130,7 @@ class GridWorld(discrete.DiscreteEnv):
             return
         if self.gui is None:
             self.gui = envs.gui.GUI(self.width)
-        self.gui.print_board(
+        self.gui.render_board(
             player_position=self.agent_position_idx,
             terminal_states=self.terminal_positions,
             walls=self._walls,

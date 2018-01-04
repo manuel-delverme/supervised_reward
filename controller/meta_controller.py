@@ -69,9 +69,5 @@ class CMAES(object):
             self.solver.tell(solutions, fitness_list)
             # history.append(self.solver.result.fbest)
             print("best", str(self.solver.result.xbest).replace("\n", " "), "fitness", self.solver.result.fbest)
-            # es.logger.add()  # write data to disc to be plotted
-            # es.disp()
-            # es.result_pretty()
             # cma.plot()  # shortcut for es.logger.plot()
-
         return history

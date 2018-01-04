@@ -1,15 +1,11 @@
-import learners.double_q_learning
-import random
-import scipy.interpolate
-import matplotlib.pyplot as plt
-import controller.meta_controller
-import envs.hungry_thirsty
-import envs.boxes
-import numpy as np
-import tqdm
-import envs.gridworld
-import time
 import itertools
+import random
+import numpy as np
+import controller.meta_controller
+import envs.boxes
+import envs.gridworld
+import envs.hungry_thirsty
+import learners.double_q_learning
 
 
 def main():
@@ -73,7 +69,7 @@ def main():
             box1_pos, box2_pos = _mdp.box_positions
             box1 = _mdp._state['box'][box1_pos]
             box2 = _mdp._state['box'][box2_pos]
-            world_states = []
+            # world_states = []
             _hack_idx = 0
             for _box1 in envs.boxes._BoxState:
                 for _box2 in envs.boxes._BoxState:
@@ -89,8 +85,24 @@ def main():
 
         learner = learners.double_q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function,
                                                        train_run=True)
-        options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=10000, generate_options=True,
-                                            plot_progress=False)
+        options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=10000, generate_options=True)
+
+        """
+        training_sample = next(possible_box_positions)
+        mdp = envs.boxes.BoxWorld(side_size=6, box_positions=training_sample)
+        options = []
+        for goal in random.sample(range(mdp.number_of_tiles), random.randrange(1, 4)):
+            opt = learners.double_q_learning.learn_option(goal, mdp)
+            # TODO: REMOVE HACK
+            if opt.shape[0] < mdp.observation_space.n:
+                # TODO: remove print("OPTION SIZE MISMATCH, TILING")
+                opt = np.tile(
+                    opt[:mdp.number_of_tiles],
+                    mdp.observation_space.n // mdp.number_of_tiles
+                )
+            options.append(opt)
+        """
+
         # for idx, option in enumerate(options):
         #     print(np.argwhere(option == -1))
         #     mdp.print_board(policy=option)
@@ -99,6 +111,12 @@ def main():
         # eval options
         cum_cum_reward = 0
         num_of_test_samples = 0
+        option_names = []
+        for option in options:
+            option_names.append(int(np.argwhere(option == -1)[0]))
+        option_names = " ".join(str(n) for n in sorted(option_names))
+
+        # print("options", option_names)
         # for eval_step, box_positions in tqdm.tqdm(enumerate(possible_box_positions), total=6):
         for eval_step, box_positions in enumerate(possible_box_positions):
             mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
@@ -122,19 +140,15 @@ def main():
             # plt.show()
 
         fitness = cum_cum_reward / num_of_test_samples
-        option_names = []
-        for option in options:
-            option_names.append(int(np.argwhere(option == -1)[0]))
-        option_names = " ".join(str(n) for n in sorted(option_names))
-
         print("score:\t{}\toptions: {}\t{}".format(fitness, len(options), option_names))
         # history.append(fitness)
+
         return fitness
 
     regressor = controller.meta_controller.CMAES(
         population_size=POPULATION_SIZE,
         fitness_function=fitness_boxes,
-        reward_space_size=8,
+        reward_space_size=18,
     )
     regressor.optimize()
 
