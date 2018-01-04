@@ -7,6 +7,7 @@ import sys
 import time
 import disk_utils
 import envs.boxes
+import envs.hungry_thirsty
 import random
 import sys
 
@@ -92,6 +93,7 @@ class QLearning(object):
                 progress_bar = tqdm.tqdm(total=max_steps, file=sys.stdout)
 
         cumulative_reward = 0
+        # TODO: REMOVEME
         terminal = True
         time_steps_under_option = 0
         discounted_reward_under_option = 0
@@ -105,6 +107,7 @@ class QLearning(object):
         option_begin_state = None
         stepss_to_goal = []
         steps_to_goal = 0
+        rendering_enabled = True
 
         for step in range(max_steps):
             # if step % (max_steps/10) == 0:
@@ -154,7 +157,7 @@ class QLearning(object):
                 cumulative_reward += reward
                 # cumulative_rewards.append(cumulative_reward)
 
-            if False and self.test_run and len(self.available_actions) < 11:  # and time_steps_under_option == 1:
+            if self.test_run and len(self.available_actions) < 11:  # and time_steps_under_option == 1:
                 render = 2
                 if is_option(action):
                     if primitive_action == -1:
@@ -166,8 +169,13 @@ class QLearning(object):
                     print(step, "pos", self.environment.agent_position_idx, "act", target, nice_act)
                     highlight_square = target
                 else:
-                    print(step, "pos", self.environment.agent_position_idx, "act", envs.boxes.BoxWorldActions(action),
-                         self.Q1[old_state, action_idx])
+                    if isinstance(self.environment, envs.boxes.BoxWorld):
+                        a = envs.boxes.BoxWorldActions(action)
+                    elif isinstance(self.environment, envs.hungry_thirsty.HungryThirsty):
+                        a = envs.hungry_thirsty.HungryThirstyActions(action)
+                    else:
+                        raise NotImplementedError()
+                    print(step, "pos", self.environment.agent_position_idx, "act", a, self.Q1[old_state, action_idx])
                     highlight_square = new_state
             else:
                 highlight_square = None
@@ -213,7 +221,18 @@ class QLearning(object):
             old_state = new_state
             self.previous_action = action
 
-            render = self.render_board(render, highlight_square)
+            if reward > 0:
+                render = self.render_board(render, highlight_square, sleep_time=1)
+            elif is_option(action) or primitive_action < 4:
+                render = self.render_board(render, highlight_square, sleep_time=0)
+            else:
+                try:
+                    relevant_positions = (self.environment.water_position, self.environment.food_position)
+                except AttributeError:
+                    relevant_positions = self.environment._state['box'].keys()
+
+                if self.environment.agent_position_idx in relevant_positions:
+                    render = self.render_board(render, highlight_square, sleep_time=0)
 
             if plot_progress and (self.train_run or self.test_run):
                 progress_bar.update(1)
@@ -234,10 +253,10 @@ class QLearning(object):
         #         opts = random.sample(opts, el)
         return opts, stepss_to_goal[1:]
 
-    def render_board(self, render, highlight_square=None):
+    def render_board(self, render, highlight_square=None, sleep_time=1./30.):
         if render > 0:
             render -= 1
-            time.sleep(1 / 30)
+            time.sleep(sleep_time)
             self.environment.show_board(
                 some_matrix=np.sum(self.Q1 + self.Q2, axis=1),
                 policy=np.argmax(self.Q1 + self.Q2, axis=1),
@@ -274,7 +293,7 @@ class QLearning(object):
         self.Q2[:, -1] = self.Q2[:, :-1].mean(axis=1)
         return self.environment.agent_position_idx
 
-    def test(self):
+    def test(self, eval_steps):
         terminal = False
         primitive_action = None
         cumulative_reward = 0
@@ -283,18 +302,18 @@ class QLearning(object):
             old_state = self.environment.reset()
             self.environment.teleport_agent(tile_idx)
 
-            steps_to_goal = 0
-
-            while not terminal and steps_to_goal < 100:
+            for step in range(eval_steps):
                 action, primitive_action, action_idx = self.pick_action(old_state, old_action=primitive_action)
+                if primitive_action == -1:
+                    continue
 
-                if primitive_action != -1:
-                    new_state, reward, terminal, info = self.environment.step(primitive_action)
-                    # self.render_board(render=2)
-                    steps_to_goal += 1
-                    cumulative_reward += reward
-                    old_state = new_state
-            self.previous_action = action
+                new_state, reward, terminal, info = self.environment.step(primitive_action)
+                cumulative_reward += reward
+
+                # self.render_board(render=2)
+
+                old_state = new_state
+                self.previous_action = action
         return cumulative_reward / self.environment.number_of_tiles
 
 

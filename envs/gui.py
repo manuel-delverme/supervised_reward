@@ -7,6 +7,8 @@ class GUI(object):
     _BANDIT_RESOURCE = 'envs/resources/bandit.jpg'
     _HEALTH_RESOURCE = 'envs/resources/health.jpg'
     _PLAYER_RESOURCE = 'envs/resources/player.jpg'
+    _WATER_RESOURCE = 'envs/resources/water.jpg'
+    _FOOD_RESOURCE = 'envs/resources/health.jpg'
     _UPARRORW_RESOURCE = 'envs/resources/arrow_up.jpg'
     _DOWNARRORW_RESOURCE = 'envs/resources/arrow_down.jpg'
     _LEFTARRORW_RESOURCE = 'envs/resources/arrow_left.jpg'
@@ -19,6 +21,8 @@ class GUI(object):
     _BANDIT_ICON = 'B'
     _HEALTH_ICON = 'H'
     _PLAYER_ICON = "P"
+    _WATER_ICON = "W"
+    _FOOD_ICON = "F"
 
     _UP = 0
     _RIGHT = 1
@@ -34,6 +38,8 @@ class GUI(object):
         _BANDIT_ICON: _BANDIT_RESOURCE,
         _HEALTH_ICON: _HEALTH_RESOURCE,
         _PLAYER_ICON: _PLAYER_RESOURCE,
+        _FOOD_ICON: _FOOD_RESOURCE,
+        _WATER_ICON: _WATER_RESOURCE,
         _UP: _UPARRORW_RESOURCE,
         _DOWN: _DOWNARRORW_RESOURCE,
         _LEFT: _LEFTARRORW_RESOURCE,
@@ -63,7 +69,7 @@ class GUI(object):
     def render_board(
             self, player_position=None, terminal_states=(), some_matrix=None, policy=None, goals=None,
             walls={}, boxes={}, hungry=False, thirsty=False, state_offset=None,
-            highlight_square=None, info=False,
+            highlight_square=None, info=False, water_position=None, food_position=False,
     ):
         COLOR_BLUE = (0, 0, 255)
         COLOR_GREEN = (0, 255, 0)
@@ -108,6 +114,10 @@ class GUI(object):
                 square_icon = self.icon[self._PLAYER_ICON]
             elif tile_idx in terminal_states:
                 square_icon = self.icon[self._BANDIT_ICON]
+            elif tile_idx == water_position:
+                square_icon = self.icon[self._WATER_ICON]
+            elif tile_idx == food_position:
+                square_icon = self.icon[self._FOOD_ICON]
             elif tile_idx in boxes.keys():
                 box_status = boxes[tile_idx].value
                 if box_status == 0:

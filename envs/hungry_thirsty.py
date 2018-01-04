@@ -44,8 +44,6 @@ class HungryThirsty(envs.gridworld.GridWorld):
         action = HungryThirstyActions(action)
         terminal = False
         info = {}
-        if random.random() < 0.1:
-            self._state['thirsty'] = True
         self._state['hungry'] = True
 
         if action == HungryThirstyActions.EAT_FOOD:
@@ -61,7 +59,8 @@ class HungryThirsty(envs.gridworld.GridWorld):
 
         reward = -1
         if not self._state['hungry']:
-            reward = 1
+            reward = 100
+            self._state['thirsty'] = True
 
         # else:
         #     reward += -1
@@ -70,6 +69,9 @@ class HungryThirsty(envs.gridworld.GridWorld):
         #     reward += 0.1
         # else:
         #     reward += -1
+
+        # if random.random() < 0.001:
+        #     self._state['thirsty'] = True
 
         return state_obj, reward, terminal, info
 
@@ -85,19 +87,25 @@ class HungryThirsty(envs.gridworld.GridWorld):
         state_hash += self._state['thirsty'] * self.number_of_tiles * 2
         return state_hash  # state.State(state_hash=state_hash, state_info=self._state.copy())
 
-    def print_board(self, some_matrix=None, close=False, policy=None, hungry=True, thirsty=True):
+    def show_board(self, some_matrix=None, close=False, policy=None, highlight_square=None):
         if close:
             return
         if self.gui is None:
             self.gui = envs.gui.GUI(self.width)
+        info = self._state.copy()
         self.gui.render_board(
             player_position=self.agent_position_idx,
             terminal_states=self.terminal_positions,
-            walls=self._walls, boxes=self.boxes,
+            water_position=self.water_position,
+            food_position=self.food_position,
+            walls=self._walls,
+            thirsty=False,  # there is no thirsty in boxes
+            hungry=True,
             some_matrix=some_matrix,
             policy=policy,
-            hungry=True,
-            thirsty=True,
+            highlight_square=highlight_square,
+            info=info,
+            state_offset=self.num_tiles * (self._hash_state() // self.num_tiles)
         )
 
     def force_state(self, state):
@@ -120,6 +128,14 @@ class HungryThirsty(envs.gridworld.GridWorld):
         elif state_hash < self.number_of_tiles:
             state_dict['hungry'] = False
         return state_hash, state_dict
+
+    def __repr__(self):
+        # TODO: dirrrty
+        return "<BoxWorld instance>"
+
+    def __str__(self):
+        # TODO: dirrrty
+        return "<BoxWorld instance>"
 
 
 if __name__ == "__main__":
