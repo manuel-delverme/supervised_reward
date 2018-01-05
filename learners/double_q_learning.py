@@ -93,7 +93,6 @@ class QLearning(object):
                 progress_bar = tqdm.tqdm(total=max_steps, file=sys.stdout)
 
         cumulative_reward = 0
-        # TODO: REMOVEME
         terminal = True
         time_steps_under_option = 0
         discounted_reward_under_option = 0
@@ -107,7 +106,6 @@ class QLearning(object):
         option_begin_state = None
         stepss_to_goal = []
         steps_to_goal = 0
-        rendering_enabled = True
 
         for step in range(max_steps):
             # if step % (max_steps/10) == 0:
@@ -153,11 +151,13 @@ class QLearning(object):
                     reward = self.surrogate_reward(self.environment)
                     if reward > 0 and self.learning_option:
                         terminal = True
+                    if reward > 0 and self.training_run:
+                        terminal = True
 
                 cumulative_reward += reward
                 # cumulative_rewards.append(cumulative_reward)
 
-            if self.test_run and len(self.available_actions) < 11:  # and time_steps_under_option == 1:
+            if False and self.test_run and len(self.available_actions) < 11:  # and time_steps_under_option == 1:
                 render = 2
                 if is_option(action):
                     if primitive_action == -1:
@@ -221,7 +221,7 @@ class QLearning(object):
             old_state = new_state
             self.previous_action = action
 
-            if reward > 0:
+            if False and self.test_run and reward > 0:
                 render = self.render_board(render, highlight_square, sleep_time=1)
             elif is_option(action) or primitive_action < 4:
                 render = self.render_board(render, highlight_square, sleep_time=0)
