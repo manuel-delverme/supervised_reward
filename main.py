@@ -1,4 +1,5 @@
 import itertools
+import multiprocessing
 import disk_utils
 import pickle
 import tqdm
@@ -10,6 +11,7 @@ import envs.boxes
 import envs.gridworld
 import envs.hungry_thirsty
 import learners.double_q_learning
+import numba
 
 
 def main():
@@ -172,42 +174,63 @@ def main():
     regressor.optimize()
 
 
-@disk_utils.disk_cache
 def bruteforce_options():
     number_of_options = 3
-    TRAINING_NO_CHANGE_STOP = 1000
-    GENERATE_RANDOM_OPTIONS = True
-    TRAINING_MAX_STEPS = 10000
-
-    TEST_MAX_STEPS_TRAIN = 2000
-    TEST_MAX_STEPS_EVAL = 1000
+    TEST_MAX_STEPS_EVAL = 100
     SIDE_SIZE = 6
     scores = collections.defaultdict(dict)
 
     option_sets = itertools.combinations([None] * (number_of_options) + list(range(36)), number_of_options)
     option_sets = list(option_sets)
-    xs = [10, 100, 200, 300, 1000, 10000]
     possible_box_positions = list(itertools.combinations([0, SIDE_SIZE - 1, (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
                                                           SIDE_SIZE * SIDE_SIZE - 1, ], 2))
 
-    progress = tqdm.tqdm(total=len(option_sets) * len(xs) * len(possible_box_positions))
+    xs = (10, 100, 200, 300, 1000, 10000)
+    progress = tqdm.tqdm(total=len(option_sets) * len(xs))
 
-    for option_set in option_sets:
-        option_set = tuple(o for o in option_set if o is not None)
-        cum_cum_reward = 0
-        for test_max_steps_train in xs:
-            for eval_step, box_positions in enumerate(possible_box_positions):
-                mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
-                learner = learners.double_q_learning.QLearning(env=mdp, options=option_set, test_run=True)
-                _, _ = learner.learn(max_steps=test_max_steps_train)
+    mdp = envs.boxes.BoxWorld(side_size=6, box_positions=())
+    learner = learners.double_q_learning.QLearning(env=mdp, options=[], test_run=True)
 
-                cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
-                cum_cum_reward += cum_reward
-                progress.update(1)
-            fitness = cum_cum_reward / eval_step
-            scores[test_max_steps_train][option_set] = fitness
-            # print_statistics(fitness, option_set)
+    option_map = {
+        tuple(): tuple()
+    }
+
+    for o in range(36):
+        mdp.agent_position_idx = o
+        learner.generate_option()
+        option_vec = tuple(learner.available_actions[-1])
+        option_map[o] = option_vec
+
+    option_sets = [tuple(o) for o in option_sets]
+    option_sets = [tuple(o for o in option_set if o is not None) for option_set in option_sets]
+    option_vecs = [tuple(option_map[o] for o in option_set) for option_set in option_sets]
+
+    for option_ids, option_vec in zip(option_sets, option_vecs):
+        cum_scores = collections.defaultdict(float)
+        for eval_step, box_positions in enumerate(possible_box_positions):
+            option_set_score = eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, xs)
+            # fitness = cum_cum_reward / eval_step
+            for k in option_set_score.keys():
+                cum_scores[k] += option_set_score[k]
+            progress.update(1)
+        scores[option_ids] = cum_scores
+        # print_statistics(fitness, option_set)
     return scores
+
+
+@disk_utils.disk_cache
+@numba.jit
+def eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, xs):
+    option_set_score = {}
+    mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
+    learner = learners.double_q_learning.QLearning(env=mdp, options=option_vec, test_run=True)
+
+    for test_max_steps_train in xs:
+        learner.learn(max_steps=test_max_steps_train)
+        cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
+        option_set_score[test_max_steps_train] = cum_reward
+        # cum_cum_reward += cum_reward
+    return option_set_score
 
 
 def print_statistics(fitness, options):

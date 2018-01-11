@@ -1,5 +1,6 @@
 import pprint
-import pygame
+
+pygame = "HACK"
 
 
 class GUI(object):
@@ -50,6 +51,7 @@ class GUI(object):
     }
 
     def __init__(self, width, tile_size=80):
+        import pygame
         self.tile_size = tile_size
         self.width = width
         self.height = width

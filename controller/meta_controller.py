@@ -1,8 +1,4 @@
 import numpy as np
-import deap.creator
-import deap.base
-import deap.tools
-import deap.algorithms
 
 import cma
 import es
@@ -12,6 +8,10 @@ import random
 
 class EvolutionaryAlgorithm(object):
     def __init__(self, population_size, fitness_function, reward_space_size):
+        import deap.algorithms
+        import deap.creator
+        import deap.base
+        import deap.tools
         deap.creator.create("FitnessMin", deap.base.Fitness, weights=(1,))
         deap.creator.create("Individual", list, fitness=deap.creator.FitnessMin)
         toolbox = deap.base.Toolbox()
@@ -29,6 +29,7 @@ class EvolutionaryAlgorithm(object):
         # self.population = [[np.random.rand(self.state_size), None] for _ in range(population_size)]
 
     def optimize(self):
+        import deap.tools
         stats = deap.tools.Statistics(lambda ind: ind.fitness.values)
         stats.register("avg", np.mean)
         stats.register("min", np.min)
@@ -66,6 +67,7 @@ class CMAES(object):
             for solution in solutions:
                 fitness = self.fitness_function(solution)
                 fitness_list.append(fitness)
+            print(fitness_list)
             self.solver.tell(solutions, fitness_list)
             # history.append(self.solver.result.fbest)
             print("best", str(self.solver.result.xbest).replace("\n", " "), "fitness", self.solver.result.fbest)
