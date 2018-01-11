@@ -185,18 +185,20 @@ def bruteforce_options():
     possible_box_positions = list(itertools.combinations([0, SIDE_SIZE - 1, (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
                                                           SIDE_SIZE * SIDE_SIZE - 1, ], 2))
 
-    xs = (10, 100, 200, 300, 1000, 10000)
+    xs = [10, 100, 200, 300, 1000, 10000]
+    dxs = (10, 90, 100, 100, 700, 9000)
+
     progress = tqdm.tqdm(total=len(option_sets) * len(xs))
 
-    mdp = envs.boxes.BoxWorld(side_size=6, box_positions=())
-    learner = learners.double_q_learning.QLearning(env=mdp, options=[], test_run=True)
+    token_mdp = envs.boxes.BoxWorld(side_size=6, box_positions=(1, 2))
+    learner = learners.double_q_learning.QLearning(env=token_mdp, options=[], test_run=True)
 
     option_map = {
         tuple(): tuple()
     }
 
     for o in range(36):
-        mdp.agent_position_idx = o
+        token_mdp.agent_position_idx = o
         learner.generate_option()
         option_vec = tuple(learner.available_actions[-1])
         option_map[o] = option_vec
@@ -208,24 +210,24 @@ def bruteforce_options():
     for option_ids, option_vec in zip(option_sets, option_vecs):
         cum_scores = collections.defaultdict(float)
         for eval_step, box_positions in enumerate(possible_box_positions):
-            option_set_score = eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, xs)
+            option_set_score = eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, dxs)
             # fitness = cum_cum_reward / eval_step
             for k in option_set_score.keys():
                 cum_scores[k] += option_set_score[k]
             progress.update(1)
-        scores[option_ids] = cum_scores
+        scores[option_ids] = dict(cum_scores)
         # print_statistics(fitness, option_set)
     return scores
 
 
 @disk_utils.disk_cache
 @numba.jit
-def eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, xs):
+def eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, dxs):
     option_set_score = {}
     mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
     learner = learners.double_q_learning.QLearning(env=mdp, options=option_vec, test_run=True)
 
-    for test_max_steps_train in xs:
+    for test_max_steps_train in dxs:
         learner.learn(max_steps=test_max_steps_train)
         cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
         option_set_score[test_max_steps_train] = cum_reward
