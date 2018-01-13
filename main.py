@@ -12,6 +12,7 @@ import envs.gridworld
 import envs.hungry_thirsty
 import learners.double_q_learning
 import numba
+import matplotlib.pyplot as plt
 
 
 def main():
@@ -174,6 +175,7 @@ def main():
     regressor.optimize()
 
 
+@disk_utils.disk_cache
 def bruteforce_options():
     number_of_options = 3
     TEST_MAX_STEPS_EVAL = 100
@@ -182,6 +184,7 @@ def bruteforce_options():
 
     option_sets = itertools.combinations([None] * (number_of_options) + list(range(36)), number_of_options)
     option_sets = list(option_sets)
+    random.shuffle(option_sets)
     possible_box_positions = list(itertools.combinations([0, SIDE_SIZE - 1, (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
                                                           SIDE_SIZE * SIDE_SIZE - 1, ], 2))
 
@@ -260,6 +263,54 @@ def pick_random_options():
     return options
 
 
+def plot_option_scores():
+    scores = bruteforce_options()
+    top_scorers = {}
+    score_history = {}
+    for option_ids, option_scores in scores.items():
+        for nr_iter, option_score in option_scores.items():
+            top_scorers[nr_iter] = (option_ids, option_score)
+            score_history[nr_iter] = []
+        break
+    for option_ids, option_scores in scores.items():
+        for nr_iter, option_score in option_scores.items():
+            if top_scorers[nr_iter][1] < option_score:
+                top_scorers[nr_iter] = (option_ids, option_score)
+            score_history[nr_iter].append(option_score)
+
+    percentiles = {nr_iter: {} for nr_iter in score_history.keys()}
+    for perc in (30, 50, 65, 95, 99):
+        percentiles[nr_iter][perc] = np.percentile(score_history[nr_iter], perc)
+    # print(percentiles)
+    import seaborn as sns
+    sns.set(color_codes=True)
+    data = []
+    _xs = sorted(score_history.keys())
+    for x in _xs:
+        data.append(score_history[x])
+    sum = 0
+    indices = []
+    for dx in _xs:
+        sum += dx
+        indices.append(sum)
+
+    plt.figure(1)
+    # plt.subplot(
+    data = np.array(data)
+
+    x_labels = [str(idx) + "_" + str(x) for idx, x in enumerate(_xs)]
+    # plt.plot(x_labels, data)
+    plt.plot(x_labels, np.repeat(data.mean(), len(x_labels)))
+    plt.show()
+
+    # df = pd.DataFrame(data, index=indices)
+    # df.groupby(axis=1)
+
+    # df.describe()
+    # ax = sns.tsplot(data=data, ci=[50, 90], color="m")
+    # return df
+
+
 if __name__ == "__main__":
     # main()
-    bruteforce_options()
+    plot_option_scores()
