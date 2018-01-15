@@ -1,6 +1,5 @@
 import pprint
-
-pygame = "HACK"
+import pygame
 
 
 class GUI(object):
@@ -71,7 +70,7 @@ class GUI(object):
     def render_board(
             self, player_position=None, terminal_states=(), some_matrix=None, policy=None, goals=None,
             walls={}, boxes={}, hungry=False, thirsty=False, state_offset=None,
-            highlight_square=None, info=False, water_position=None, food_position=False,
+            highlight_square=None, info=False, water_position=None, food_position=False, just_numbers=True,
     ):
         COLOR_BLUE = (0, 0, 255)
         COLOR_GREEN = (0, 255, 0)
@@ -185,8 +184,15 @@ class GUI(object):
                     text = font.render(value_idx, 2, COLOR_RED)
                 else:
                     text = font.render(value_idx, 2, black)
-                self.screen.blit(text, (icon_x, icon_y + offset * 10))
+                if just_numbers:
+                    text = policy_font.render(value_idx, 2, black)
+                    self.screen.blit(text, (icon_x, icon_y + offset * 10))
+                    break
+                else:
+                    self.screen.blit(text, (icon_x, icon_y + offset * 10))
             for offset in range(2, 4):
+                if just_numbers:
+                    break
                 value_idx = str(tile_idx + offset * num_of_tiles)
                 if value_idx == state_hash:
                     text = font.render(value_idx, 2, COLOR_RED)
