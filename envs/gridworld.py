@@ -122,7 +122,7 @@ class GridWorld(discrete.DiscreteEnv):
         self.gui.render_board(
             player_position=self.agent_position_idx,
             terminal_states=self.terminal_positions,
-            walls=self._walls, boxes=self.boxes
+            walls=self._walls, boxes=self.box_position
         )
 
     def print_board(self, some_matrix=None, close=False, policy=None):

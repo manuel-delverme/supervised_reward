@@ -7,10 +7,12 @@ import collections
 import random
 import numpy as np
 import controller.meta_controller
-import envs.boxes
+# import envs.boxes
 import envs.gridworld
 import envs.hungry_thirsty
+import envs.simple_boxes
 import learners.double_q_learning
+import learners.q_learning
 import numba
 import matplotlib.pyplot as plt
 
@@ -24,6 +26,18 @@ def main():
     TEST_MAX_STEPS_TRAIN = 2000
     TEST_MAX_STEPS_EVAL = 1000
     SIDE_SIZE = 6
+
+    """
+    Check why 4 options aren’t working (rerun experiment!)
+    > WOOPSIE
+
+    Implement the right version of world
+    >
+    Bring data of/for options
+    Put food everywhere in the map
+    Test with food spawning in random positions
+    Option based bottleneck are not
+    """
 
     env_name = "brute_boxworld"  # "hungry-thirsty"
 
@@ -177,7 +191,7 @@ def main():
 
 @disk_utils.disk_cache
 def bruteforce_options():
-    number_of_options = 3
+    number_of_options = 4
     TEST_MAX_STEPS_EVAL = 100
     SIDE_SIZE = 6
     scores = collections.defaultdict(dict)
@@ -188,12 +202,12 @@ def bruteforce_options():
     possible_box_positions = list(itertools.combinations([0, SIDE_SIZE - 1, (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
                                                           SIDE_SIZE * SIDE_SIZE - 1, ], 2))
 
-    xs = [10, 100, 200, 300, 1000, 10000]
-    dxs = (10, 90, 100, 100, 700, 9000)
+    xs = [10, 100, 500, 1000, 10000]
+    dxs = [x - xs[idx] for idx, x in enumerate(xs[1:])]
 
     progress = tqdm.tqdm(total=len(option_sets) * len(xs))
 
-    token_mdp = envs.boxes.BoxWorld(side_size=6, box_positions=(1, 2))
+    token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=(1, 2))
     learner = learners.double_q_learning.QLearning(env=token_mdp, options=[], test_run=True)
 
     option_map = {
@@ -224,11 +238,11 @@ def bruteforce_options():
 
 
 @disk_utils.disk_cache
-@numba.jit
+# @numba.jit
 def eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, dxs):
     option_set_score = {}
-    mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
-    learner = learners.double_q_learning.QLearning(env=mdp, options=option_vec, test_run=True)
+    mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=box_positions)
+    learner = learners.q_learning.QLearning(env=mdp, options=option_vec, test_run=True)
 
     for test_max_steps_train in dxs:
         learner.learn(max_steps=test_max_steps_train)

@@ -1,12 +1,12 @@
 import pickle
 import sys
 import os
-from functools import lru_cache
+# from functools import lru_cache
 import hashlib
 
 
 def disk_cache(f):
-    @lru_cache(maxsize=1024)
+    # @lru_cache(maxsize=1024)
     def wrapper(*args, **kwargs):
         if not os.path.exists("cache/"):
             print("[DISK_CACHE] creating cache dir")
