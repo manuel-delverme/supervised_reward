@@ -105,7 +105,7 @@ class BoxWorld(envs.gridworld.GridWorld):
             self._state['box'][pos] = random.choice(list(_BoxState))
         return self._hash_state()
 
-    def show_board(self, some_matrix=None, close=False, policy=None, highlight_square=None):
+    def show_board(self, some_matrix=None, close=False, policy=None, highlight_square=None, just_numbers=True):
         if close:
             return
         if self.gui is None:
@@ -122,7 +122,8 @@ class BoxWorld(envs.gridworld.GridWorld):
             policy=policy,
             highlight_square=highlight_square,
             info=info,
-            state_offset=self.num_tiles * (self._hash_state() // self.num_tiles)
+            state_offset=self.num_tiles * (self._hash_state() // self.num_tiles),
+            just_numbers=True
         )
 
     def force_state(self, state):
