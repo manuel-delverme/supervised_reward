@@ -397,7 +397,37 @@ def plot_option_scores():
     # ax = sns.tsplot(data=data, ci=[50, 90], color="m")
     # return df
 
+def test_qlearning():
+    SIDE_SIZE = 6
+    TEST_MAX_STEPS_TRAIN = 2000
+    TEST_MAX_STEPS_EVAL = 1000
+
+    possible_box_positions = list(itertools.combinations(
+        [0, SIDE_SIZE - 1, (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE, SIDE_SIZE * SIDE_SIZE - 1, ], 2))
+    cum_cum_reward = 0
+    for eval_step, box_positions in enumerate(possible_box_positions):
+        mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
+        learner = learners.q_learning.QLearning(env=mdp, options=[], test_run=True)
+        learner.learn(max_steps=TEST_MAX_STEPS_TRAIN)
+
+        cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
+        cum_cum_reward += cum_reward
+    fitness_q = cum_cum_reward / eval_step
+    print(fitness_q)
+
+    cum_cum_reward = 0
+    for eval_step, box_positions in enumerate(possible_box_positions):
+        mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
+        learner = learners.double_q_learning.QLearning(env=mdp, options=[], test_run=True)
+        learner.learn(max_steps=TEST_MAX_STEPS_TRAIN, generate_options=False)
+
+        cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
+        cum_cum_reward += cum_reward
+    fitness_2q = cum_cum_reward / eval_step
+    print("q, 2q", fitness_q, fitness_2q)
+
 
 if __name__ == "__main__":
     # main()
-    plot_option_scores()
+    # plot_option_scores()
+    test_qlearning()

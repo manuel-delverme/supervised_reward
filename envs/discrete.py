@@ -3,6 +3,8 @@ from gym import Env, spaces
 from gym.utils import seeding
 import numpy as np
 
+NR_RANDOMS = 10000
+
 
 def categorical_sample(prob_n, np_random):
     """
@@ -27,6 +29,9 @@ class DiscreteEnv(Env):
     """
 
     def __init__(self, number_of_states, number_of_actions, transition_matrix, initial_state_distribution):
+        self.random_idx = 0
+        self.randoms = np.random.rand(NR_RANDOMS)
+
         self.transition_matrix = transition_matrix
         self.initial_state_distribution = initial_state_distribution
         self.last_action = None  # for rendering
@@ -50,7 +55,8 @@ class DiscreteEnv(Env):
 
     def _step(self, action):
         transitions = self.transition_matrix[self.agent_position_idx][action]
-        pick = random.random()
+        self.random_idx += 1
+        pick = self.randoms[self.random_idx % NR_RANDOMS]
         val = 0
         for t in transitions:
             val += t[0]
