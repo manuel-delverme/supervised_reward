@@ -4,16 +4,17 @@ import os
 # from functools import lru_cache
 # @lru_cache(maxsize=1024)
 import hashlib
+import gzip
 
 
-def disk_cache(f):
+def disk_cache(function):
     # @lru_cache(maxsize=1024)
     def wrapper(*args, **kwargs):
         if not os.path.exists("cache/"):
             print("[DISK_CACHE] creating cache dir")
             os.makedirs("cache/")
 
-        fid = f.__name__
+        fid = function.__name__
         cache_file = "cache/{}".format(fid)
         if args:
             if not os.path.exists(cache_file):
@@ -27,25 +28,26 @@ def disk_cache(f):
 
             fid = fid + "/" + "::".join(args_filtered).replace("/", "_")
             cache_file = "cache/{}".format(fid)
-        cache_file += ".pkl"
+        cache_file += ".pkl.gz"
+
         try:
-            with open(cache_file, "rb") as fin:
+            with gzip.open(cache_file, "rb") as fin:
                 retr = pickle.load(fin)
         except FileNotFoundError:
-            # OLD STYLE
-            old_fid = f.__name__
-            if args:
-                old_fid += "::".join(str(arg) for arg in args)
-            old_cache_file = "cache/{}.pkl".format(old_fid)
-
             try:
-                with open(old_cache_file, "rb") as fin:
+                # OLD STYLE
+                with open(cache_file[:-3], "rb") as fin:
                     retr = pickle.load(fin)
             except (FileNotFoundError, OSError):
-                retr = f(*args, **kwargs)
+                retr = function(*args, **kwargs)
 
-            with open(cache_file, "wb") as fout:
+            with gzip.open(cache_file, "wb") as fout:
                 pickle.dump(retr, fout)
-        return retr
 
+            try:
+                os.remove(cache_file[:-3])
+                print("removed old file", cache_file[:-3])
+            except Exception:
+                pass
+        return retr
     return wrapper

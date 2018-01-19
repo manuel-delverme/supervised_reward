@@ -1,45 +1,29 @@
-import itertools
-import multiprocessing
-import disk_utils
-import pickle
-import tqdm
 import collections
+import itertools
 import random
+import matplotlib.pyplot as plt
 import numpy as np
+import tqdm
 import controller.meta_controller
-# import envs.boxes
+import disk_utils
 import envs.gridworld
 import envs.hungry_thirsty
 import envs.simple_boxes
 import learners.double_q_learning
 import learners.q_learning
-import numba
-import matplotlib.pyplot as plt
 
 
 def main():
     POPULATION_SIZE = 4
     TRAINING_NO_CHANGE_STOP = 1000
-    GENERATE_RANDOM_OPTIONS = True
+    GENERATE_RANDOM_OPTIONS = False
     TRAINING_MAX_STEPS = 10000
 
     TEST_MAX_STEPS_TRAIN = 2000
     TEST_MAX_STEPS_EVAL = 1000
     SIDE_SIZE = 6
 
-    """
-    Check why 4 options aren’t working (rerun experiment!)
-    > WOOPSIE
-
-    Implement the right version of world
-    >
-    Bring data of/for options
-    Put food everywhere in the map
-    Test with food spawning in random positions
-    Option based bottleneck are not
-    """
-
-    env_name = "brute_boxworld"  # "hungry-thirsty"
+    env_name = "simple_boxworld"  # "hungry-thirsty"
 
     if env_name == "hungry-thirsty":
         def fitness_hungry_thirsty(reward_vector):
@@ -115,7 +99,6 @@ def main():
 
         fitness_fn = fitness_hungry_thirsty
         reward_space_size = 4
-
     elif env_name == "boxworld":
         def fitness_boxes(reward_vector):
             # init a world
@@ -178,6 +161,76 @@ def main():
 
         fitness_fn = fitness_boxes
         reward_space_size = 18
+    elif env_name == "simple_boxworld":
+        def fitness_simple_boxes(reward_vector):
+
+            def gen_worlds():
+                possible_box_positions = list(itertools.combinations([
+                    0,
+                    SIDE_SIZE - 1,
+                    (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
+                    SIDE_SIZE * SIDE_SIZE - 1,
+                    ], 2))
+                random.shuffle(possible_box_positions)
+                for p in possible_box_positions:
+                    yield envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=p)
+            possible_worlds = gen_worlds()
+
+            training_world = next(possible_worlds)
+            sensor_readings = gather_sensor_readings(training_world)
+
+            # define reward fn
+            def intrinsic_reward_function(_mdp):
+                sensor_reading = sensor_readings[_mdp.agent_position_idx]
+                assert np.allclose(np.sum(reward_vector[sensor_reading]), reward_vector.dot(sensor_reading), 1e-10)
+                # return reward_vector.dot(sensor_reading)
+                return np.sum(reward_vector[sensor_reading])
+
+            # generate options set
+            learner = learners.double_q_learning.QLearning(env=training_world, surrogate_reward=intrinsic_reward_function,
+                                                           train_run=True)
+            options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=10000, generate_options=True)
+
+            # eval options
+            cum_cum_reward = 0
+            for eval_step, testing_world in enumerate(possible_worlds):
+                learner = learners.double_q_learning.QLearning(env=testing_world, options=options, test_run=True)
+                _, _ = learner.learn(max_steps=TEST_MAX_STEPS_TRAIN, generate_options=False)
+
+                cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
+                cum_cum_reward += cum_reward
+            fitness = cum_cum_reward / eval_step
+
+            print(reward_vector, end="")
+            print_statistics(fitness, options)
+            return fitness
+
+        def gather_sensor_readings(training_world):
+            sensor_readings = {}
+            for position_idx in range(training_world.number_of_tiles):
+                reading = np.ones(shape=(3, 3), dtype=np.bool)
+                for dx in (-1, 0, +1):
+                    x = position_idx % training_world.width
+                    # for dy in (-mdp.width, 0, mdp.width):
+                    for dy in (-1, 0, +1):
+                        y = position_idx // training_world.width
+                        px = dx + x
+                        py = dy + y
+                        if px < 0 or py < 0 or py == training_world.height or px == training_world.width:
+                            # print("skipped", x, y, px, py)
+                            continue
+                        tile_idx = position_idx + dx + dy * training_world.width
+                        # sensor_readings[position_idx].append((position_idx + dx, position_idx + dy * mdp.width))
+                        if position_idx not in training_world._walls:
+                            reading[dy + 1][dx + 1] = False
+                        else:
+                            if tile_idx not in training_world._walls[position_idx]:
+                                reading[dy + 1][dx + 1] = False
+                sensor_readings[position_idx] = reading.flatten()
+            return sensor_readings
+
+        fitness_fn = fitness_simple_boxes
+        reward_space_size = 9
     else:
         raise NotImplementedError("{} is not a valid environment".format(env_name))
 
@@ -255,7 +308,10 @@ def eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, dxs):
 def print_statistics(fitness, options):
     option_names = []
     for option in options:
-        option_names.append(int(np.argwhere(option == -1)[0]))
+        for idx, action in enumerate(option):
+            if action == -1:
+                option_names.append(idx)
+                break
     option_names = " ".join(str(n) for n in sorted(option_names))
     print("score:\t{}\toptions: {}\t{}".format(fitness, len(options), option_names))
 
@@ -405,9 +461,20 @@ def test_qlearning():
     possible_box_positions = list(itertools.combinations(
         [0, SIDE_SIZE - 1, (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE, SIDE_SIZE * SIDE_SIZE - 1, ], 2))
     cum_cum_reward = 0
+
+    token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=(1, 2))
+    learner = learners.double_q_learning.QLearning(env=token_mdp, options=[], test_run=True)
+    token_mdp.agent_position_idx = 0
+    learner.generate_option()
+    option_vec0 = tuple(learner.available_actions[-1])
+    token_mdp.agent_position_idx = 17
+    learner.generate_option()
+    option_vec1 = tuple(learner.available_actions[-1])
+    option_vec = [option_vec0, option_vec1]
+
     for eval_step, box_positions in enumerate(possible_box_positions):
-        mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
-        learner = learners.q_learning.QLearning(env=mdp, options=[], test_run=True)
+        mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=box_positions)
+        learner = learners.q_learning.QLearning(env=mdp, options=option_vec, test_run=True)
         learner.learn(max_steps=TEST_MAX_STEPS_TRAIN)
 
         cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
@@ -417,8 +484,8 @@ def test_qlearning():
 
     cum_cum_reward = 0
     for eval_step, box_positions in enumerate(possible_box_positions):
-        mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
-        learner = learners.double_q_learning.QLearning(env=mdp, options=[], test_run=True)
+        mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=box_positions)
+        learner = learners.double_q_learning.QLearning(env=mdp, options=option_vec, test_run=True)
         learner.learn(max_steps=TEST_MAX_STEPS_TRAIN, generate_options=False)
 
         cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
@@ -428,6 +495,6 @@ def test_qlearning():
 
 
 if __name__ == "__main__":
-    # main()
+    main()
+    # test_qlearning()
     # plot_option_scores()
-    test_qlearning()

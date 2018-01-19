@@ -6,7 +6,7 @@ import learners.policy_iter
 import sys
 import time
 import disk_utils
-import envs.boxes
+# import envs.boxes
 import envs.hungry_thirsty
 import random
 import sys
@@ -63,7 +63,7 @@ class QLearning(object):
 
                 while self.is_option(action_idx) and self.available_actions[action_idx][state] == TERMINATE_OPTION:
                     action_idx = random.randint(0, self.nr_primitive_actions - 1)
-                # print("random pick", action_idx)
+                    # print("random pick", action_idx)
 
             if self.is_option(action_idx):
                 primitive_action_idx = self.available_actions[action_idx][state]
@@ -95,51 +95,28 @@ class QLearning(object):
         primitive_action = None
         old_state = self.environment.reset()
         new_state = old_state
+        option_goals = set()
 
         for step in range(max_steps):
-            # if terminal:
-            #     old_state = self.environment.reset()
-            #     stepss_to_goal.append(steps_to_goal)
-            #     steps_to_goal = 0
-
-            # if len(old_states) == 20 and len(set(old_states)) < 4 and self.is_option(
-            #         action) and time_steps_under_option >= 19:
-            #     kill_option = True
-            #     print("killed at:", time_steps_under_option, "\n", np.argwhere(action == -1))
-            #     print(old_states, "\n", old_actions)
-            #     self.environment.render_board(policy=action)
-            #     input()
-            #     old_states.clear()
-            # else:
-            #     kill_option = False
-
-            # action_idx, primitive_action = self.pick_action(old_state, old_action=action_idx,
-            #  kill_option=kill_option)
-
             action_idx, primitive_action = self.pick_action(
                 old_state, old_action_idx=action_idx, old_primitive_action=primitive_action)
 
             if option_begin_state is None and self.is_option(action_idx):
                 option_begin_state = old_state
 
-            # old_states.append(old_state)
-            # old_actions.append(primitive_action)
-
             Q, q = (self.Q1, self.Q2) if random.random() > 0.5 else (self.Q2, self.Q1)
 
             if primitive_action != TERMINATE_OPTION:
                 new_state, reward, terminal, info = self.environment.step(self.available_actions[primitive_action])
-                # steps_to_goal += 1
 
-                # if self.surrogate_reward is not None:
-                #     reward = self.surrogate_reward(self.environment)
-                #     if reward > 0 and self.learning_option:
-                #         terminal = True
-                #     if reward > 0 and self.training_run:
-                #         terminal = True
+                if self.surrogate_reward is not None:
+                    reward = self.surrogate_reward(self.environment)
+                    # if reward > 0 and self.training_run:
+                    #     terminal = True
+                    # Gianluca: reset when option is learnt!
+                    # ME: nope
 
                 cumulative_reward += reward
-                # cumulative_rewards.append(cumulative_reward)
 
             if primitive_action == TERMINATE_OPTION:
                 # end of option
@@ -170,7 +147,6 @@ class QLearning(object):
                 delta_Q = reward + self.gamma * np.max(q[new_state, :]) - Q[old_state, action_idx]
                 Q[old_state][action_idx] += self.alpha * delta_Q
 
-
             # if False and self.test_run and len(self.available_actions) < 11:  # and time_steps_under_option == 1:
             #     render = 2
             #     if self.is_option(action):
@@ -199,8 +175,8 @@ class QLearning(object):
             # else:
             #     no_change = 0
 
-            # if generate_options and delta_Q > 1 and self.environment.agent_position_idx not in option_goals:
-            #     option_goals.add(self.generate_option())
+            if generate_options and delta_Q > 1 and self.environment.agent_position_idx not in option_goals:
+                option_goals.add(self.generate_option())
 
             # if steps_of_no_change is not None and no_change > max_no_change:
             #     max_no_change = no_change
@@ -229,10 +205,8 @@ class QLearning(object):
             # if steps_of_no_change is not None and no_change > steps_of_no_change:
             #    break
 
-
-        # opts = self.available_actions[self.environment.action_space.n:]
-        # return opts, stepss_to_goal[1:]
-        return
+        opts = self.available_actions[self.environment.action_space.n:]
+        return opts, cumulative_reward
 
     def render_board(self, render, highlight_square=None, sleep_time=1. / 30.):
         if render > 0:
@@ -284,7 +258,8 @@ class QLearning(object):
             self.environment.teleport_agent(tile_idx)
 
             for step in range(eval_steps):
-                action_idx, primitive_action_idx = self.pick_action(old_state, old_primitive_action=primitive_action_idx,
+                action_idx, primitive_action_idx = self.pick_action(old_state,
+                                                                    old_primitive_action=primitive_action_idx,
                                                                     old_action_idx=action_idx)
 
                 if primitive_action_idx == -1:

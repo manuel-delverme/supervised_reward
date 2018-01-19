@@ -1,14 +1,8 @@
-import numpy as np
 import functools
-import envs.gridworld
-import collections
-import tqdm
-import sys
-import time
-import disk_utils
-import envs.boxes
 import random
-import sys
+import time
+
+import numpy as np
 
 TERMINATE_OPTION = -1
 
@@ -93,51 +87,42 @@ class QLearning(object):
                 new_state, reward, terminal, info = self.environment.step(self.available_actions[primitive_action])
                 cumulative_reward += reward
 
+            future_value = self.qmax[new_state]
+
             if primitive_action == TERMINATE_OPTION:
-                assert option_begin_state is not None
                 time_difference = time_steps_under_option
+                old_state = option_begin_state
+                discounted_reward = discounted_reward_under_option
+            else:
+                time_difference = 1
+                discounted_reward = reward
+                if self.is_option(action_idx):
+                    assert option_begin_state is not None
+                    time_steps_under_option += 1
+                    discounted_reward_under_option += reward * (self.gamma ** time_steps_under_option)
 
-                qmax = self.qmax[new_state]
-                discounted_future_value = (self.gamma ** time_difference) * qmax
-                # discounted_future_value = (self.gamma ** time_difference) * np.max(self.Q[new_state, :])
-                old_q = self.Q[option_begin_state, action_idx]
-                delta_Q = discounted_reward_under_option + discounted_future_value - old_q
-                old_q += self.alpha * delta_Q
+            discounted_future_value = (self.gamma ** time_difference) * future_value
 
-                if old_q > qmax:
-                    self.qmax[old_state] = old_q
-                    self.qargmax[old_state] = action_idx
+            old_q = self.Q[old_state, action_idx]
+            delta_Q = discounted_reward + discounted_future_value - old_q
+            new_q = old_q + self.alpha * delta_Q
 
+            self.Q[old_state, action_idx] = new_q
+
+            if primitive_action == TERMINATE_OPTION:
                 time_steps_under_option = 0
                 option_begin_state = None
 
-            elif self.is_option(action_idx):
-                # following option
-                time_steps_under_option += 1
-                # register the reward following option
-                discounted_reward_under_option += reward * (self.gamma ** time_steps_under_option)
+            # found a better max
+            if new_q > self.qmax[old_state]:
+                self.qmax[old_state] = new_q
+                self.qargmax[old_state] = action_idx
 
-                # update the q-value for the last transition off-policy
-                # delta_Q = reward + self.gamma * np.max(self.Q[new_state, :]) - self.Q[old_state, action_idx]
-
-                old_q = self.Q[old_state, action_idx]
-                qmax = self.qmax[new_state]
-                delta_Q = reward + self.gamma * qmax - old_q
-                old_q += self.alpha * delta_Q
-
-                if old_q > qmax:
-                    self.qmax[old_state] = old_q
-                    self.qargmax[old_state] = action_idx
-
-            else:
-                qmax = np.max(self.Q[new_state, :])
-                old_q = self.Q[old_state, action_idx]
-                delta_Q = reward + self.gamma * qmax - old_q
-                old_q += self.alpha * delta_Q
-
-                if old_q > qmax:
-                    self.qmax[old_state] = old_q
-                    self.qargmax[old_state] = action_idx
+            # the max was updated
+            elif action_idx == self.qargmax[old_state]:
+                arg_max = np.argmax(self.Q[old_state])
+                self.qargmax[old_state] = arg_max
+                self.qmax[old_state] = self.Q[old_state][arg_max]
 
             old_state = new_state
         return
@@ -199,7 +184,6 @@ def main():
     option_set_score = {}
     mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=box_positions)
     learner = QLearning(env=mdp, options=option_vec, test_run=True)
-    import tqdm
 
     training_time = 0
     testing_time = 0
@@ -217,7 +201,8 @@ def main():
         diff = (time.time() - time0)
         testing_time += diff
         # cum_cum_reward += cum_reward
-    print("training_time", training_time, "testing_time", testing_time, "train/test", float(training_time) / testing_time)
+    print("training_time", training_time, "testing_time", testing_time, "train/test",
+          float(training_time) / testing_time)
 
 
 if __name__ == "__main__":
