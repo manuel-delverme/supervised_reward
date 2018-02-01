@@ -2,6 +2,7 @@ import enum
 import envs.gridworld
 import random
 import gym.spaces
+import itertools
 
 
 class BoxWorldActions(enum.Enum):
@@ -130,6 +131,68 @@ class BoxWorld(envs.gridworld.GridWorld):
         # TODO: remove, will cause bugs
         super(BoxWorld, self).teleport_agent(state % self.num_tiles)
 
+    @staticmethod
+    def get_fitness_fn(SIDE_SIZE):
+        def fitness_boxes(reward_vector):
+            # init a world
+            possible_box_positions = list(itertools.combinations([
+                0,
+                SIDE_SIZE - 1,
+                (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
+                SIDE_SIZE * SIDE_SIZE - 1,
+                ], 2))
+            random.shuffle(possible_box_positions)
+            possible_box_positions = (p for p in possible_box_positions)
+
+            training_sample = next(possible_box_positions)
+
+            if GENERATE_RANDOM_OPTIONS:
+                options = pick_random_options()
+            else:
+                mdp = envs.boxes.BoxWorld(side_size=6, box_positions=training_sample)
+
+                # define reward fn
+                def intrinsic_reward_function(_mdp):
+                    # thirst = _mdp._state['thirsty']
+                    hunger = _mdp._state['hungry']
+
+                    box1_pos, box2_pos = _mdp.box_positions
+                    box1 = _mdp._state['box'][box1_pos]
+                    box2 = _mdp._state['box'][box2_pos]
+                    # world_states = []
+                    _hack_idx = 0
+                    for _box1 in envs.boxes._BoxState:
+                        for _box2 in envs.boxes._BoxState:
+                            for _hunger in (True, False):
+                                # world_states.append((box1 == _box1 and box2 == _box2 and hunger == _hunger))
+                                if box1 == _box1 and box2 == _box2 and hunger == _hunger:
+                                    _idx = _hack_idx
+                                _hack_idx += 1
+
+                    # x = np.array(world_states, dtype=np.int)
+                    # return np.dot(reward_vector, x)
+                    return reward_vector[_idx]
+
+                # generate options set
+                learner = learners.double_q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function,
+                                                               train_run=True)
+                options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=10000, generate_options=True)
+
+            # eval options
+            cum_cum_reward = 0
+            for eval_step, box_positions in enumerate(possible_box_positions):
+                mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
+                learner = learners.double_q_learning.QLearning(env=mdp, options=options, test_run=True)
+                _, _ = learner.learn(max_steps=TEST_MAX_STEPS_TRAIN, generate_options=False, plot_progress=False)
+
+                cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
+                cum_cum_reward += cum_reward
+            fitness = cum_cum_reward / eval_step
+
+            print_statistics(fitness, options)
+            return fitness
+
+        return fitness_boxes
 
 if __name__ == "__main__":
     import time

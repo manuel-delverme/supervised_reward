@@ -50,17 +50,16 @@ class EvolutionaryAlgorithm(object):
 
 
 class CMAES(object):
-    def __init__(self, reward_space_size, population_size, fitness_function, weight_decay=0.0, sigma_init=0.5):
+    def __init__(self, reward_space_size, population_size, fitness_function):
         self.solver = es.CMAES(
             reward_space_size,
-            popsize=population_size,
+            popsize=3,
             weight_decay=0.0,
-            sigma_init=0.5
+            sigma_init=0.5,
         )
         self.fitness_function = fitness_function
 
     def optimize(self):
-        history = []
         while True:
             solutions = self.solver.ask()
             fitness_list = []
@@ -71,5 +70,6 @@ class CMAES(object):
             self.solver.tell(solutions, fitness_list)
             # history.append(self.solver.result.fbest)
             print("best", str(self.solver.result.xbest).replace("\n", " "), "fitness", self.solver.result.fbest)
+            print("sigma", str(self.solver.sigma))
             # cma.plot()  # shortcut for es.logger.plot()
         return history

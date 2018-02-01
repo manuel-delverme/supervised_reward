@@ -92,6 +92,7 @@ class Adam(Optimizer):
 
 class CMAES(cma.CMAEvolutionStrategy):
     """CMA-ES wrapper."""
+
     def __init__(self, num_params,  # number of model parameters
                  sigma_init=0.10,  # initial standard deviation
                  popsize=255,  # population size
@@ -105,7 +106,12 @@ class CMAES(cma.CMAEvolutionStrategy):
         super(CMAES, self).__init__(
             self.num_params * [0],
             self.sigma_init,
-            {'popsize': popsize, }
+            {
+                'popsize': popsize,
+                'bounds': [-2, 2],
+                'minstd': 0.05,
+                # 'integer_variables': [0, 1, 2, 3, 4, 5, 6, 7, 8],
+            }
         )
 
     def rms_stdev(self):

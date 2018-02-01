@@ -19,12 +19,32 @@ class GridWorldActions(enum.Enum):
 
 class GridWorld(discrete.DiscreteEnv):
     metadata = {'render.modes': ['human', 'ansi']}
+
+    # TODO: remove "out of map" walls, they are added automatically
     _walls = {
+        0: [-7, -6, -1],
+        1: [-5, ],
+        2: [-4, ],
+        3: [-3, ],
+        4: [-2, ],
+        5: [0, -1, 6, ],
+
+        11: [12, ],
+        17: [18, ],
+        23: [24, ],
+        29: [30, ],
+
+        30: [35, 36, ],
+        31: [36, 37, ],
+        32: [37, 38, 33, ],
+        33: [38, 39, ],
+        34: [39, 40, ],
+        35: [39, 36, 40, ],
+
         8: [9, ],
         14: [15, 20],
 
         20: [21, ],
-        32: [33, ],
 
         12 + 0: [12 + 6, ],
         12 + 1: [12 + 7, ],
@@ -33,15 +53,26 @@ class GridWorld(discrete.DiscreteEnv):
         12 + 4: [12 + 10, ],
     }
     for k, v in list(_walls.items()):
+        _walls[k].extend(range(-7, -1))
+        _walls[k].extend(range(36, 41))
+
+    for k, v in list(_walls.items()):
         for vi in v:
             if vi not in _walls:
                 _walls[vi] = []
             _walls[vi].append(k)
 
+    for k, v in list(_walls.items()):
+        _walls[k] = set(_walls[k])
+
     def __init__(self, side_size, terminal_states, start_from_borders=False, base_transition_probability=1.0):
         self.height = side_size
         self.width = side_size
         self.num_tiles = side_size * side_size
+
+        for pos_idx in range(-side_size - 1, self.num_tiles + side_size + 1):
+            if pos_idx not in self._walls:
+                self._walls[pos_idx] = {}
 
         transition = {}
         # self.grid = np.arange(self.height * self.width).reshape((self.height, self.width))

@@ -137,6 +137,80 @@ class HungryThirsty(envs.gridworld.GridWorld):
         # TODO: dirrrty
         return "<BoxWorld instance>"
 
+    @staticmethod
+    def get_env_fitness_fn(SIDE_SIZE):
+        def fitness_hungry_thirsty(reward_vector):
+            # init a world
+            possible_box_positions = [
+                0,
+                SIDE_SIZE - 1,
+                SIDE_SIZE * SIDE_SIZE - 1,
+                (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
+                ]
+            _box_positions = []
+            for idx, box_pos in enumerate(possible_box_positions[:-1]):
+                _box_positions.append((box_pos, possible_box_positions[idx + 1]))
+                _box_positions.append((possible_box_positions[idx + 1], box_pos))
+
+            random.shuffle(_box_positions)
+            possible_box_positions = (p for p in _box_positions)
+
+            water_pos, food_pos = next(possible_box_positions)
+
+            if GENERATE_RANDOM_OPTIONS:
+                options = pick_random_options()
+            else:
+                print("training with water: {} food {}".format(water_pos, food_pos))
+                mdp = envs.hungry_thirsty.HungryThirsty(
+                    side_size=SIDE_SIZE, water_position=water_pos, food_position=food_pos
+                )
+
+                # define an intrinsic reward fn
+                def intrinsic_reward_function(_mdp):
+                    thirst = _mdp._state['thirsty']
+                    hunger = _mdp._state['hungry']
+                    x = np.array((
+                        thirst and hunger,
+                        not thirst and not hunger,
+                        thirst and not hunger,
+                        hunger and not thirst,
+                    ), dtype=np.int)
+                    # TODO: should be optimized as reward_vec[idx]
+                    return np.dot(reward_vector, x)
+
+                # generate option set
+                learner = learners.double_q_learning.QLearning(
+                    env=mdp,
+                    surrogate_reward=intrinsic_reward_function,
+                    train_run=True,
+                )
+                options, cum_reward = learner.learn(
+                    steps_of_no_change=TRAINING_NO_CHANGE_STOP,
+                    max_steps=TRAINING_MAX_STEPS,
+                    generate_options=True
+                )
+
+            # eval options
+
+            # cum_cum_reward += cum_reward
+            # num_of_test_samples += 1
+
+            cum_cum_reward = 0
+            print_statistics(-1, options)
+            for eval_step, box_positions in enumerate(possible_box_positions):
+                food_pos, water_pos = box_positions
+
+                mdp = envs.hungry_thirsty.HungryThirsty(side_size=6, food_position=food_pos, water_position=water_pos)
+                learner = learners.double_q_learning.QLearning(env=mdp, options=options, test_run=True)
+                _, _ = learner.learn(max_steps=TEST_MAX_STEPS_TRAIN)
+                cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
+                cum_cum_reward += cum_reward
+
+            fitness = cum_cum_reward / (eval_step + 1)
+            print_statistics(fitness, options)
+            return fitness,
+        return fitness_hungry_thirsty, 4
+
 
 if __name__ == "__main__":
     import time
