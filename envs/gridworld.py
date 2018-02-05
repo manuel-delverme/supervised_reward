@@ -38,8 +38,8 @@ class GridWorld(discrete.DiscreteEnv):
         31: [36, 37, ],
         32: [37, 38, 33, ],
         33: [38, 39, ],
-        34: [39, 40, ],
-        35: [39, 36, 40, ],
+        34: [39, 40, 41, ],
+        35: [36, 40, 41, 42, ],
 
         8: [9, ],
         14: [15, 20],
@@ -54,7 +54,7 @@ class GridWorld(discrete.DiscreteEnv):
     }
     for k, v in list(_walls.items()):
         _walls[k].extend(range(-7, -1))
-        _walls[k].extend(range(36, 41))
+        _walls[k].extend(range(36, 42))
 
     for k, v in list(_walls.items()):
         for vi in v:
@@ -72,7 +72,7 @@ class GridWorld(discrete.DiscreteEnv):
 
         for pos_idx in range(-side_size - 1, self.num_tiles + side_size + 1):
             if pos_idx not in self._walls:
-                self._walls[pos_idx] = {}
+                self._walls[pos_idx] = set()
 
         transition = {}
         # self.grid = np.arange(self.height * self.width).reshape((self.height, self.width))

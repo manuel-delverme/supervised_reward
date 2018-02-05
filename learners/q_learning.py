@@ -29,6 +29,7 @@ class QLearning(object):
             action_size += len(options)
             for option in options:
                 # goal = np.argwhere(action == -1)[0]
+                assert isinstance(option, tuple)
                 self.action_to_id[option] = len(self.action_to_id)
         self.Q = 0.00001 * np.random.rand(env.observation_space.n, action_size)
         self.qmax = np.max(self.Q, axis=1)

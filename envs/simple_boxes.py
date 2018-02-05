@@ -1,10 +1,12 @@
 import enum
 import numpy as np
 import itertools
+import matplotlib.pyplot as plt
 import envs.gridworld
 import learners
 import random
 import gym.spaces
+import learners.q_learning
 
 
 class BoxWorldActions(enum.Enum):
@@ -20,7 +22,9 @@ class _BoxState(enum.Enum):
 
 
 class BoxWorldSimple(envs.gridworld.GridWorld):
-    def __init__(self, side_size, box_positions=(0, 30), agent_lifetime=15):
+    HACK = 0
+
+    def __init__(self, side_size, box_positions=(), agent_lifetime=5):
         super(BoxWorldSimple, self).__init__(
             side_size=side_size,
             terminal_states=(),
@@ -100,12 +104,17 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
             'box2_is_full': self.box2_is_full,
         })
         action_names = [o.index(-1) for o in option_vec]
-        self.gui.render_board(
-            player_position=self.agent_position_idx,
-            boxes={
+        if len(self.box_positions) > 0:
+            boxes_state = {
                 self.box_positions[0]: _BoxState.CLOSED if self.box1_is_full else _BoxState.OPEN,
                 self.box_positions[1]: _BoxState.CLOSED if self.box2_is_full else _BoxState.OPEN,
-            },
+            }
+        else:
+            boxes_state = {}
+
+        self.gui.render_board(
+            player_position=self.agent_position_idx,
+            boxes=boxes_state,
             walls=self._walls,
             some_matrix=some_matrix,
             policy=policy,
@@ -190,75 +199,222 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
                     if action == -1:
                         option_names.append(idx)
                         break
-            training_world.box_positions = (-1, -1)
-            training_world.agent_position_idx = -1
-            training_world.show_board(highlight_squares=option_names, info={'score': fitness})
+
+            BoxWorldSimple.HACK += 1
+            if BoxWorldSimple.HACK % 10 == 0:
+                training_world.box_positions = (-1, -1)
+                training_world.agent_position_idx = -1
+                training_world.show_board(highlight_squares=option_names, info={'score': fitness})
             option_names = " ".join(str(n) for n in sorted(option_names))
             print("score:\t{}\toptions: {}\t{}".format(fitness, len(options), option_names))
 
             return fitness
 
         def gather_sensor_readings(training_world):
-            sensor_readings = [None, ] * training_world.number_of_tiles
-            for position_idx in range(training_world.number_of_tiles):
-                reading = np.ones(shape=(3, 3), dtype=np.bool)
+            world_tiles = training_world.number_of_tiles
+            world_walls = training_world._walls
+            world_width = training_world.width
+            tmp_world = training_world
+            del training_world
 
-                reading[1][1] = 1
-                # up down right left
-                aaaaa = [
-                    ((0, 1), -training_world.width),
-                    ((1, 0), -1),
-                    # 1, 1 is empty
-                    ((1, 1), 1),
-                    ((2, 1), training_world.width),
-                ]
-                for (i, j), d_pos in aaaaa:
-                    try:
-                        reading[i][j] = (position_idx + d_pos) in training_world._walls[position_idx]
-                    except KeyError:
-                        pass
-                bbbbb = [
-                    ((0, 0), (-training_world.width, - 1)),
-                    ((0, 2), (-training_world.width, + 1)),
-                    ((2, 0), (training_world.width, - 1)),
-                    ((2, 2), (training_world.width, + 1)),
-                ]
+            sensor_readings = [None, ] * world_tiles
+
+            for position_idx in range(world_tiles):
+                # tmp_world.show_board(highlight_square=position_idx)
+                can_reach = np.ones(shape=(3, 3), dtype=np.bool) * False
+
+                can_reach[1][1] = True
+
                 # can go up
-                up_position = position_idx - training_world.width
-                up_left_position = position_idx - training_world.width - 1
-                up_right_position = position_idx - training_world.width + 1
-                if reading[0][1] == 1:
-                    if up_position in training_world._walls[up_left_position]:
-                        reading[0][0] = 0
-                    if up_position in training_world._walls[up_right_position]:
-                        reading[0][2] = 0
-
+                up_position = position_idx - world_width
+                up_left_position = position_idx - world_width - 1
+                up_right_position = position_idx - world_width + 1
                 left_position = position_idx - 1
-                down_left_position = left_position + training_world.width
-
-                if reading[1][0] == 1:
-                    if left_position in training_world._walls[up_left_position]:
-                        reading[0][0] = 0
-                    if left_position in training_world._walls[down_left_position]:
-                        reading[2][0] = 0
-
-                down_position = position_idx + training_world.width
+                down_left_position = left_position + world_width
+                down_position = position_idx + world_width
                 down_right_position = down_position + 1
-
-                if reading[2][1] == 1:
-                    if down_position in training_world._walls[down_left_position]:
-                        reading[2][0] = 0
-                    if down_position in training_world._walls[down_right_position]:
-                        reading[2][2] = 0
-
                 right_position = position_idx + 1
-                if reading[1][2] == 1:
-                    if right_position in training_world._walls[up_right_position]:
-                        reading[2][0] = 0
-                    if right_position in training_world._walls[down_right_position]:
-                        reading[2][2] = 0
 
-                sensor_readings[position_idx] = reading.flatten()
+                up_coord = (0, 1)
+                up_right_coord = (0, 2)
+                right_coord = (1, 2)
+                down_right_coord = (2, 2)
+                down_coord = (2, 1)
+                down_left_coord = (2, 0)
+                left_coord = (1, 0)
+                up_left_coord = (0, 0)
+
+                if up_position not in world_walls[position_idx]:
+                    can_reach[up_coord] = True
+                if left_position not in world_walls[position_idx]:
+                    can_reach[left_coord] = True
+                if down_position not in world_walls[position_idx]:
+                    can_reach[down_coord] = True
+                if right_position not in world_walls[position_idx]:
+                    can_reach[right_coord] = True
+
+                if can_reach[up_coord] and can_reach[left_coord]:
+                    if up_left_position not in world_walls[left_position].union(world_walls[up_position]):
+                        can_reach[up_left_coord] = True
+
+                if can_reach[down_coord] and can_reach[left_coord]:
+                    if down_left_position not in world_walls[left_position].union(world_walls[down_position]):
+                        can_reach[down_left_coord] = True
+
+                if can_reach[down_coord] and can_reach[right_coord]:
+                    if down_right_position not in world_walls[right_position].union(world_walls[down_position]):
+                        can_reach[down_right_coord] = True
+
+                if can_reach[up_coord] and can_reach[right_coord]:
+                    if up_right_position not in world_walls[right_position].union(world_walls[up_position]):
+                        can_reach[up_right_coord] = True
+
+                # if position_idx > 5:
+                #     plt.matshow(can_reach.reshape((3, 3)))
+                #     plt.show()
+
+                sensor_readings[position_idx] = np.logical_not(can_reach).flatten()
+                # sensor_readings[position_idx] = can_reach.flatten()
+            return sensor_readings
+
+        return fitness_simple_boxes
+
+    @staticmethod
+    def get_weight_evolution_fitness_fn(SIDE_SIZE):
+        # For n in range 0..5:
+        # sweep the state space
+        # create n options as sorted(mask.dot(reward_vector))[:n]
+
+        TEST_MAX_STEPS_EVAL = 100
+        TEST_MAX_STEPS_TRAIN = 2000
+
+        def fitness_simple_boxes(reward_vector):
+            def gen_worlds():
+                possible_box_positions = list(itertools.combinations([
+                    0,
+                    SIDE_SIZE - 1,
+                    (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
+                    SIDE_SIZE * SIDE_SIZE - 1,
+                ], 2))
+                random.shuffle(possible_box_positions)
+                for p in possible_box_positions:
+                    yield BoxWorldSimple(side_size=SIDE_SIZE, box_positions=p)
+
+            fake_world = BoxWorldSimple(side_size=SIDE_SIZE)
+            fake_world.step = None
+            sensor_readings = gather_sensor_readings(fake_world)
+
+            scores = []
+            for goal_idx, position_idx in enumerate(range(fake_world.number_of_tiles)):
+                sensor_reading = sensor_readings[position_idx]
+                scores.append((goal_idx, np.sum(reward_vector[sensor_reading])))
+            scores = sorted(scores, key=lambda x: x[1], reverse=True)
+
+            options = []
+            fitnesses = []
+            # for goal_idx, goal_score in scores[:5]:
+            if True:
+                options = list(tuple(learners.q_learning.learn_option(goal_idx[0], fake_world)) for goal_idx in scores[:4])
+                # options.append(option)
+
+                # eval options
+                cum_cum_reward = 0
+                for eval_step, testing_world in enumerate(gen_worlds()):
+                    learner = learners.q_learning.QLearning(env=testing_world, options=options, test_run=True)
+                    _, _ = learner.learn(max_steps=TEST_MAX_STEPS_TRAIN, generate_options=False)
+
+                    cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
+                    cum_cum_reward += cum_reward
+                fitnesses.append(cum_cum_reward / (eval_step + 1))
+
+                #  print(reward_vector, end="")
+                option_names = []
+                for option in options:
+                    for idx, action in enumerate(option):
+                        if action == -1:
+                            option_names.append(idx)
+                            break
+
+                BoxWorldSimple.HACK += 1
+                if BoxWorldSimple.HACK % 10 == 0:
+                    testing_world.box_positions = (-1, -1)
+                    testing_world.agent_position_idx = -1
+                    testing_world.show_board(highlight_squares=option_names, info={'score': fitnesses[-1]})
+                option_names = " ".join(str(n) for n in sorted(option_names))
+                print("score:\t{}\toptions: nr:{}\tnames:{}".format(fitnesses[-1], len(options), option_names))
+
+            return max(fitnesses)
+
+        def gather_sensor_readings(training_world):
+            world_tiles = training_world.number_of_tiles
+            world_walls = training_world._walls
+            world_width = training_world.width
+            tmp_world = training_world
+            del training_world
+
+            sensor_readings = [None, ] * world_tiles
+
+            for position_idx in range(world_tiles):
+                # tmp_world.show_board(highlight_square=position_idx)
+                # can_reach = np.ones(shape=(3, 3), dtype=np.bool) * False
+                can_reach = np.ones(shape=(4, 1), dtype=np.bool) * False
+
+                # can_reach[1][1] = True
+
+                # can go up
+                up_position = position_idx - world_width
+                up_left_position = position_idx - world_width - 1
+                up_right_position = position_idx - world_width + 1
+                left_position = position_idx - 1
+                down_left_position = left_position + world_width
+                down_position = position_idx + world_width
+                down_right_position = down_position + 1
+                right_position = position_idx + 1
+
+                up_coord = (0, 1)
+                up_right_coord = (0, 2)
+                right_coord = (1, 2)
+                down_right_coord = (2, 2)
+                down_coord = (2, 1)
+                down_left_coord = (2, 0)
+                left_coord = (1, 0)
+                up_left_coord = (0, 0)
+
+                up_coord = 0
+                left_coord = 1
+                down_coord = 2
+                right_coord = 3
+
+                if up_position not in world_walls[position_idx]:
+                    can_reach[up_coord] = True
+                if left_position not in world_walls[position_idx]:
+                    can_reach[left_coord] = True
+                if down_position not in world_walls[position_idx]:
+                    can_reach[down_coord] = True
+                if right_position not in world_walls[position_idx]:
+                    can_reach[right_coord] = True
+
+                # if can_reach[up_coord] and can_reach[left_coord]:
+                #     if up_left_position not in world_walls[left_position].union(world_walls[up_position]):
+                #         can_reach[up_left_coord] = True
+
+                # if can_reach[down_coord] and can_reach[left_coord]:
+                #     if down_left_position not in world_walls[left_position].union(world_walls[down_position]):
+                #         can_reach[down_left_coord] = True
+
+                # if can_reach[down_coord] and can_reach[right_coord]:
+                #     if down_right_position not in world_walls[right_position].union(world_walls[down_position]):
+                #         can_reach[down_right_coord] = True
+
+                # if can_reach[up_coord] and can_reach[right_coord]:
+                #     if up_right_position not in world_walls[right_position].union(world_walls[up_position]):
+                #         can_reach[up_right_coord] = True
+
+                # if position_idx > 5:
+                #     plt.matshow(can_reach.reshape((3, 3)))
+                #     plt.show()
+
+                sensor_readings[position_idx] = can_reach.flatten()
             return sensor_readings
 
         return fitness_simple_boxes

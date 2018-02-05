@@ -13,8 +13,22 @@ import learners.double_q_learning
 import learners.q_learning
 
 
+def evolve_weights():
+    POPULATION_SIZE = 6  # if < 6 cmaes mirrors, disable that (?)
+    SIDE_SIZE = 6
+
+    fitness_fn, reward_space_size = envs.simple_boxes.BoxWorldSimple.get_weight_evolution_fitness_fn(SIDE_SIZE), 4
+
+    regressor = controller.meta_controller.CMAES(
+        population_size=POPULATION_SIZE,
+        fitness_function=fitness_fn,
+        reward_space_size=reward_space_size,
+    )
+    regressor.optimize()
+
+
 def evolve_intrinsic():
-    POPULATION_SIZE = 6 # if < 6 cmaes mirrors, disable that (?)
+    POPULATION_SIZE = 6  # if < 6 cmaes mirrors, disable that (?)
     TRAINING_NO_CHANGE_STOP = 1000
     GENERATE_RANDOM_OPTIONS = False
     TRAINING_MAX_STEPS = 10000
@@ -304,7 +318,9 @@ def test_qlearning():
 
 
 if __name__ == "__main__":
-    evolve_intrinsic()
+    evolve_weights()
+    # evolve_intrinsic()
+
     # update the genetic search, and plot where the masks activate
 
     # test_qlearning()
