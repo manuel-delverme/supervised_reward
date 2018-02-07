@@ -17,7 +17,7 @@ def evolve_weights():
     POPULATION_SIZE = 6  # if < 6 cmaes mirrors, disable that (?)
     SIDE_SIZE = 6
 
-    fitness_fn, reward_space_size = envs.simple_boxes.BoxWorldSimple.get_weight_evolution_fitness_fn(SIDE_SIZE), 4
+    fitness_fn, reward_space_size = envs.simple_boxes.BoxWorldSimple.get_weight_evolution_fitness_fn(SIDE_SIZE)
 
     regressor = controller.meta_controller.CMAES(
         population_size=POPULATION_SIZE,
@@ -90,7 +90,7 @@ def bruteforce_options():
     for option_ids, option_vec in zip(option_sets, option_vecs):
         cum_scores = collections.defaultdict(float)
         for eval_step, box_positions in enumerate(possible_box_positions):
-            option_set_score = eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, dxs)
+            option_set_score = envs.simple_boxes.BoxWorldSimple.eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, dxs)
 
             for k in option_set_score.keys():
                 cum_scores[k] += option_set_score[k]
@@ -98,33 +98,6 @@ def bruteforce_options():
         scores[option_ids] = dict(cum_scores)
         # print_statistics(fitness, option_set)
     return scores
-
-
-# @disk_utils.disk_cache
-# @numba.jit
-def eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, option_vec, dxs):
-    option_set_score = {}
-    mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=box_positions)
-    learner = learners.q_learning.QLearning(env=mdp, options=option_vec, test_run=True)
-
-    # mdp.show_board(some_matrix=learner.qmax, policy=learner.qargmax, info={"desc":"cached q"})
-    # mdp.show_board(some_matrix=learner.Q, policy=learner.qargmax, info={"desc":"real q"})
-
-    training_steps = 0
-    for test_max_steps_train in dxs:
-        learner.learn(max_steps=test_max_steps_train)
-
-        training_steps += test_max_steps_train
-
-        cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL, render=False)
-        # if cum_reward > 0:
-        #     cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL, render=True)
-        option_set_score[test_max_steps_train] = cum_reward
-        # if cum_reward > 0:
-        #     mdp.show_board(some_matrix=learner.qmax, policy=learner.qargmax, option_vec=option_vec,
-        #  info={"training_steps", training_steps})
-        # cum_cum_reward += cum_reward
-    return option_set_score
 
 
 def print_statistics(fitness, options):

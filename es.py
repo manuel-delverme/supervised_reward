@@ -102,9 +102,11 @@ class CMAES(cma.CMAEvolutionStrategy):
         self.sigma_init = sigma_init
         self.weight_decay = weight_decay
         self.solutions = None
+        initial_state = self.num_params * [0]
+        # initial_state = [0.99, -0.99, 0.99, -0.99]
 
         super(CMAES, self).__init__(
-            self.num_params * [0],
+            initial_state,
             self.sigma_init,
             {
                 'popsize': popsize,
