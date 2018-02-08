@@ -8,6 +8,7 @@ import learners
 import random
 import gym.spaces
 import learners.q_learning
+import matplotlib.pyplot as plt
 
 
 class BoxWorldActions(enum.Enum):
@@ -26,11 +27,7 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
     HACK = 0
 
     def __init__(self, side_size, box_positions=(), agent_lifetime=5):
-        super(BoxWorldSimple, self).__init__(
-            side_size=side_size,
-            terminal_states=(),
-            base_transition_probability=0.9,
-        )
+        super(BoxWorldSimple, self).__init__(side_size, terminal_states=(), base_transition_probability=0.9,)
         self._lifetime = agent_lifetime
         self.time_left = agent_lifetime
         self.box1_is_full = None
@@ -216,8 +213,6 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
             world_tiles = training_world.number_of_tiles
             world_walls = training_world._walls
             world_width = training_world.width
-            tmp_world = training_world
-            del training_world
 
             sensor_readings = [None, ] * world_tiles
 
@@ -341,7 +336,7 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
 
                 scores.append((goal_idx, score))
 
-            xs = [256, ]
+            xs = [20 + 20*x for x in range(100)]
             dxs = [xs[0], ] + [x - xs[idx] for idx, x in enumerate(xs[1:])]
             possible_box_positions = list(itertools.combinations([
                 0,
@@ -372,10 +367,15 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
                     SIDE_SIZE * SIDE_SIZE - 1,
                 ], 2))
                 random.shuffle(possible_box_positions)
+                cum_cum_reward = [0] * len(xs)
                 for eval_step, box_positions in enumerate(possible_box_positions):
-                    option_set_scores = BoxWorldSimple.eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, options,
-                                                                          dxs)
-                    cum_cum_reward += option_set_scores[xs[0]]
+                    option_set_scores = BoxWorldSimple.eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, options, dxs)
+
+                    for x in xs:
+                        cum_cum_reward[xs.index(x)] += option_set_scores[x]
+                plt.plot(xs, cum_cum_reward)
+                plt.show()
+
                 fitness = cum_cum_reward / (eval_step + 1)
                 fitnesses.append(fitness)
 
@@ -469,11 +469,15 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         learner = learners.q_learning.QLearning(env=mdp, options=option_vec, test_run=True)
 
         training_steps = 0
+        fitness = 0
         for test_max_steps_train in dxs:
-            learner.learn(max_steps=test_max_steps_train)
+            _, cum_reward, fitness = learner.learn(max_steps=test_max_steps_train)
+            # doesn't work, terminate options bugs everything
+            # fitness = (cum_reward - test_max_steps_train) / 100
+
             training_steps += test_max_steps_train
-            cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL, render=False)
-            option_set_score[training_steps] = cum_reward
+            # cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL, render=False)
+            option_set_score[training_steps] = fitness
         return option_set_score
 
 
