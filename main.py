@@ -291,6 +291,10 @@ def test_qlearning():
 
 
 if __name__ == "__main__":
+    new_world = envs.simple_boxes.BoxWorldSimple(side_size=7)
+    new_world.show_board()
+    assert False
+
     evolve_weights()
     # evolve_intrinsic()
 
