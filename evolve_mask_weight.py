@@ -1,5 +1,7 @@
-import controller.meta_controller
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import controller.meta_controller
 import itertools
 import numpy as np
 import controller.meta_controller
