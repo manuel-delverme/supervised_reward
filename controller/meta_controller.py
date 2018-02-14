@@ -91,7 +91,7 @@ class CMAES(object):
             # history.append(self.solver.result.fbest)
             print("*" * 30)
             print("ran", len(solutions), "solutions, scores:", [int(f) for f in fitness_list])
-            print("best {0} fitness {1}".format(np.round(self.solver.result.xbest.reshape(3,3), 2), self.solver.result.fbest))
+            print("best mask: \n{0}\n fitness {1}".format(np.round(self.solver.result.xbest.reshape(3,3), 2), self.solver.result.fbest))
             print("sigma", str(self.solver.sigma))
             print("*" * 30)
             plt.plot(f_h)
