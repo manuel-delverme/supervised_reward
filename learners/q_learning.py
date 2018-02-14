@@ -316,7 +316,7 @@ def main():
 
 @disk_utils.disk_cache
 def learn_option(goal, mdp):
-    print("\ngenerating policy for goal:{}\n".format(goal))
+    print("generating policy for goal:{}".format(goal))
 
     def surrogate_reward(_mdp):
         # return 1 if goal == _mdp._hash_state() else -1

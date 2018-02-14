@@ -84,10 +84,10 @@ class CMAES(object):
             # solutions = inds
             for solution in solutions:
                 fitness = self.fitness_function(solution)
-                fitness_list.append(fitness)
+                fitness_list.append(-fitness)
             # print(fitness_list)
             self.solver.tell(solutions, fitness_list)
-            f_h.append(np.array(fitness_list).mean())
+            f_h.append(-np.array(fitness_list).mean())
             # history.append(self.solver.result.fbest)
             print("*" * 30)
             print("ran", len(solutions), "solutions, scores:", [int(f) for f in fitness_list])
