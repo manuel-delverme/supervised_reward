@@ -103,6 +103,9 @@ class GUI(object):
 
             policy_position = (icon_x, icon_y + self.tile_size / 2)
 
+            if tile_idx in walls:
+                pygame.draw.rect(self.screen, COLOR_BLACK, [icon_x, icon_y, self.tile_size, self.tile_size])
+
             if policy is not None:
                 policy_act = policy[state_hash]
                 try:
@@ -148,30 +151,11 @@ class GUI(object):
             if square_icon:
                 self.screen.blit(square_icon, (icon_x, icon_y))
 
-            try:
-                tile_walls = walls[tile_idx]
-            except KeyError:
-                pass
-            else:
-                width = 10
-                if tile_idx + 1 in tile_walls:
-                    # pygame.draw.rect(self.screen, COLOR_BLACK, [icon_x, icon_y, self.tile_size, self.tile_size])
-                    height = self.tile_size
-                    wall_x = icon_x + self.tile_size - width
-                    pygame.draw.rect(self.screen, COLOR_YELLOW, [wall_x, icon_y, width, height])
-                if tile_idx - 1 in tile_walls:
-                    pygame.draw.rect(self.screen, COLOR_RED, [icon_x, icon_y, width, self.tile_size])
-                if tile_idx + 6 in tile_walls:
-                    pygame.draw.rect(self.screen, COLOR_GREEN, [icon_x, icon_y + self.tile_size - width, self.tile_size, width])
-                if tile_idx - 6 in tile_walls:
-                    pygame.draw.rect(self.screen, COLOR_BLUE, [icon_x, icon_y, self.tile_size, width])
-
             if some_matrix is not None:
                 value = 0
                 for offset in range(0, some_matrix.shape[0] // num_of_tiles):
                     value_idx = tile_idx + offset * num_of_tiles
                     value += some_matrix[value_idx]
-                    # value = "{1}[{0}]".format(value_idx, value)
 
                 val = round(value / (some_matrix.shape[0] // num_of_tiles), 2)
                 if val > 99:
@@ -192,15 +176,14 @@ class GUI(object):
                 self.screen.blit(text,
                                  (icon_x - 5 + self.tile_size / 2 * offset_x, int(icon_y + self.tile_size * 3 / 4)))
 
-            black = (0, 0, 0)
             for offset in range(0, 2):
                 value_idx = str(tile_idx + offset * num_of_tiles)
                 if value_idx == state_hash:
                     text = font.render(value_idx, 2, COLOR_RED)
                 else:
-                    text = font.render(value_idx, 2, black)
+                    text = font.render(value_idx, 2, COLOR_BLACK)
                 if just_numbers:
-                    text = policy_font.render(value_idx, 2, black)
+                    text = policy_font.render(value_idx, 2, COLOR_BLACK)
                     self.screen.blit(text, (icon_x, icon_y + offset * 10))
                     break
                 else:
@@ -212,7 +195,7 @@ class GUI(object):
                 if value_idx == state_hash:
                     text = font.render(value_idx, 2, COLOR_RED)
                 else:
-                    text = font.render(value_idx, 2, black)
+                    text = font.render(value_idx, 2, COLOR_BLACK)
                 self.screen.blit(text, (icon_x + self.tile_size / 2, icon_y + (offset - 2) * 10))
 
         if info:

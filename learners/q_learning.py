@@ -10,21 +10,25 @@ TERMINATE_OPTION = -1
 
 
 class QLearning(object):
-    def __init__(self, env, options=None, epsilon=0.1, gamma=0.90, alpha=0.2, surrogate_reward=None, test_run=False,
-                 learning_option=False, train_run=False):
-        self.time_steps_under_option = 0
-        self.option_begin_state = None
-        self.action_idx = None
-        self.primitive_action = None
-        self.option_goals = set()
-        self.discounted_reward_under_option = 0
-        self.fitness = 0
-        self.cumulative_reward = 0
+    def __init__(self, env, options=None, epsilon=0.1, gamma=0.90, alpha=0.2, surrogate_reward=None, goal=None):
+
+        # self.learning_state = {
+        #     'time_steps_under_option' : 0,
+        #     'self.option_begin_state' : None,
+        #     'self.action_idx' : None,
+        #     'self.primitive_action' : None,
+        #     'self.option_goals' : set(),
+        #     'self.discounted_reward_under_option' : 0,
+        #     'self.fitness' : 0,
+        #     'self.cumulative_reward' : 0,
+        #     'self.terminal' : True,
+        # }
+
+        self.goal = goal
         self.epsilon = epsilon
         self.starting_epsilon = epsilon
         self.gamma = gamma
         self.alpha = alpha
-        self.terminal = True
 
         self.environment = env
         self.nr_primitive_actions = self.environment.action_space.n
@@ -72,83 +76,116 @@ class QLearning(object):
 
         return action_idx, primitive_action_idx
 
-    def learn(self, max_steps, plot_speed=False, generate_options=False):
-        if self.terminal:
-            self.old_state = self.environment.reset()
-            self.terminal = False
+    def learn(self, generate_options=False, plot_every=None, xs=None,):
+        if xs is not None:
+            xs = set(xs)
+        cumulative_reward = 0
+        fitness = 0
+        time_steps_under_option = 0
+        discounted_reward_under_option = 0
 
-        self.new_state = self.old_state
+        option_begin_state = None
+        action_idx = None
+        primitive_action = None
+        old_state = self.environment.reset()
+        new_state = old_state
+        option_goals = set()
+        fitnesses = []
 
-        steps = range(max_steps)
-        if plot_speed:
-            import tqdm
-            steps = tqdm.tqdm(steps)
+        terminal = False
+        for step in range(max(xs)):
+            if plot_every is not None and step % plot_every == 0:
+                self.render_board(render=2, info={'step': step}, highlight_square=self.goal)
 
-        for step in steps:
-            self.action_idx, self.primitive_action = self.pick_action(self.old_state, old_action_idx=self.action_idx,
-                                                            old_primitive_action=self.primitive_action)
+            action_idx, primitive_action = self.pick_action(old_state, old_action_idx=action_idx,
+                                                            old_primitive_action=primitive_action)
 
-            if self.option_begin_state is None and self.is_option(self.action_idx):
-                self.option_begin_state = self.old_state
+            if option_begin_state is None and self.is_option(action_idx):
+                option_begin_state = old_state
 
-            if self.primitive_action != TERMINATE_OPTION:
-                self.new_state, reward, self.terminal, info = self.environment.step(self.available_actions[self.primitive_action])
+            if primitive_action != TERMINATE_OPTION:
+                new_state, reward, terminal, info = self.environment.step(self.available_actions[primitive_action])
                 if self.surrogate_reward is not None:
                     reward = self.surrogate_reward(self.environment)
+                    terminal = reward > 0
                 else:
                     if reward > 0:
-                        self.fitness += 1
-                self.cumulative_reward += reward
+                        fitness += 1
+                cumulative_reward += reward
 
-            self.future_value = self.qmax[self.new_state]
+            future_value = self.qmax[new_state]
 
-            if self.terminal:
+            if terminal:
                 self.environment.reset()
-                if self.is_option(self.action_idx):
-                    self.primitive_action = TERMINATE_OPTION
+                if self.is_option(action_idx):
+                    primitive_action = TERMINATE_OPTION
 
-            if self.primitive_action == TERMINATE_OPTION:
-                time_difference = self.time_steps_under_option
-                self.old_state = self.option_begin_state
-                discounted_reward = self.discounted_reward_under_option
+            if primitive_action == TERMINATE_OPTION:
+                time_difference = time_steps_under_option
+                old_state = option_begin_state
+                discounted_reward = discounted_reward_under_option
             else:
                 time_difference = 1
                 discounted_reward = reward
-                if self.is_option(self.action_idx):
-                    assert self.option_begin_state is not None
-                    self.time_steps_under_option += 1
-                    self.discounted_reward_under_option += reward * (self.gamma ** self.time_steps_under_option)
+                if self.is_option(action_idx):
+                    assert option_begin_state is not None
+                    time_steps_under_option += 1
+                    discounted_reward_under_option += reward * (self.gamma ** time_steps_under_option)
 
-            discounted_future_value = (self.gamma ** time_difference) * self.future_value
+            discounted_future_value = (self.gamma ** time_difference) * future_value
 
-            old_q = self.Q[self.old_state, self.action_idx]
+            old_q = self.Q[old_state, action_idx]
             delta_Q = discounted_reward + discounted_future_value - old_q
             new_q = old_q + self.alpha * delta_Q
 
-            self.Q[self.old_state, self.action_idx] = new_q
+            self.Q[old_state, action_idx] = new_q
 
-            if self.primitive_action == TERMINATE_OPTION:
-                self.time_steps_under_option = 0
-                self.option_begin_state = None
+            if primitive_action == TERMINATE_OPTION:
+                time_steps_under_option = 0
+                option_begin_state = None
 
             # found a better max
-            if new_q > self.qmax[self.old_state]:
-                self.qmax[self.old_state] = new_q
-                self.qargmax[self.old_state] = self.action_idx
+            if new_q > self.qmax[old_state]:
+                self.qmax[old_state] = new_q
+                self.qargmax[old_state] = action_idx
 
             # the max was updated
-            elif self.action_idx == self.qargmax[self.old_state]:
-                arg_max = np.argmax(self.Q[self.old_state])
-                self.qargmax[self.old_state] = arg_max
-                self.qmax[self.old_state] = self.Q[self.old_state][arg_max]
+            elif action_idx == self.qargmax[old_state]:
+                arg_max = np.argmax(self.Q[old_state])
+                self.qargmax[old_state] = arg_max
+                self.qmax[old_state] = self.Q[old_state][arg_max]
 
-            if generate_options and delta_Q > 0 and self.environment.agent_position_idx not in self.option_goals:
+            if generate_options and delta_Q > 0 and self.environment.agent_position_idx not in option_goals:
                 # reward = self.surrogate_reward(self.environment)
-                self.option_goals.add(self.generate_option())
+                option_goals.add(self.generate_option())
 
-            self.old_state = self.new_state
+            old_state = new_state
+
+            if step in xs:
+                fitnesses.append(fitness)
+        fitnesses.append(fitness)
+
+        # save state
+        # self.cumulative_reward = cumulative_reward
+        # self.fitness = fitness
+        # self.time_steps_under_option = time_steps_under_option
+        # self.discounted_reward_under_option = discounted_reward_under_option
+
+        # self.option_begin_state = option_begin_state
+        # self.action_idx = action_idx
+        # self.primitive_action = primitive_action
+        # self.old_state = old_state
+        # self.new_state = new_state
+
+        # self.terminal = terminal = False
+
+        # self.old_state = old_state
+        # self.new_state = new_state
+        # time_steps_under_option = 0
+        # option_begin_state = None
+
         opts = self.available_actions[self.environment.action_space.n:]
-        return opts, self.cumulative_reward, self.fitness
+        return opts, cumulative_reward, fitnesses
 
     def generate_option(self):
         goal = self.environment.agent_position_idx
@@ -285,25 +322,9 @@ def learn_option(goal, mdp):
         # return 1 if goal == _mdp._hash_state() else -1
         return 1 if goal == _mdp.agent_position_idx else -1
 
-    # learner = learners.policy_iter.PolicyIteration(
-    #     env=mdp,
-    #     options=None,
-    #     epsilon=0.1,
-    #     gamma=0.90,
-    #     alpha=0.1,
-    #     surrogate_reward=surrogate_reward,
-    # )
-    # # TODO: re-enable QLearning this pol iter is for deterministic envs
-    # value, option = learner.solvePolicyIteration()
-
-    simple_mdp = envs.gridworld.GridWorld(side_size=6, terminal_states=(), start_from_borders=True)
-    learner = QLearning(
-        env=simple_mdp,
-        options=None, epsilon=0.1, gamma=0.90, alpha=0.1, surrogate_reward=surrogate_reward,
-        learning_option=True
-    )
-    _ = learner.learn(max_steps=1000000)
-    option = np.argmax(learner.Q1 + learner.Q2, axis=1)
+    learner = QLearning(env=mdp, options=None, surrogate_reward=surrogate_reward, goal=goal)
+    _ = learner.learn(max_steps=100000)
+    option = np.argmax(learner.Q, axis=1)
 
     state_idx = goal
     try:
@@ -312,12 +333,13 @@ def learn_option(goal, mdp):
             state_idx += mdp.number_of_tiles
     except IndexError as e:
         pass
-    simple_mdp.print_board(
-        some_matrix=np.max(learner.Q1 + learner.Q2, axis=1),
-        # some_matrix=value,
-        policy=option,
-    )
-    input("done")
+
+    # mdp.show_board(
+    #     some_matrix=np.max(learner.Q, axis=1),
+    #     # some_matrix=value,
+    #     policy=np.array(option),
+    # )
+    # input("done")
     option = np.tile(
         option, mdp.observation_space.n // mdp.number_of_tiles
     )

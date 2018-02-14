@@ -4,6 +4,7 @@ import collections
 import numpy as np
 import itertools
 import envs.gridworld
+import envs.gui
 import learners
 import random
 import gym.spaces
@@ -46,12 +47,13 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         tile_idx, gridworld_reward, gridworld_terminal, info = super(envs.gridworld.GridWorld, self)._step(action)
 
         reward = -1
-        if self.box1_is_full and self.box_positions[0] == self.agent_position_idx:
-            self.box1_is_full = False
-            reward = 100
-        elif self.box2_is_full and self.box_positions[1] == self.agent_position_idx:
-            self.box2_is_full = False
-            reward = 100
+        if len(self.box_positions) > 0:
+            if self.box1_is_full and self.box_positions[0] == self.agent_position_idx:
+                self.box1_is_full = False
+                reward = 100
+            elif self.box2_is_full and self.box_positions[1] == self.agent_position_idx:
+                self.box2_is_full = False
+                reward = 100
 
         # open boxes randomly close
         if random.random() < 0.1:
@@ -124,12 +126,11 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         )
 
     def __repr__(self):
-        # TODO: dirrrty
-        return "<BoxWorld instance>"
+        return "<BoxWorld {} instance>".format(self.num_tiles)
 
     def __str__(self):
         # TODO: dirrrty
-        return "<BoxWorld instance>"
+        return "<BoxWorld {} instance>".format(self.num_tiles)
 
     @staticmethod
     def get_fitness_fn(SIDE_SIZE):
@@ -276,209 +277,14 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
 
         return fitness_simple_boxes
 
-    @staticmethod
-    def get_weight_evolution_fitness_fn(SIDE_SIZE, consider_orientation=False):
-        # For n in range 0..5:
-        # sweep the state space
-        # create n options as sorted(mask.dot(reward_vector))[:n]
-
-        TEST_MAX_STEPS_EVAL = 1000
-        TEST_MAX_STEPS_TRAIN = 2000
-        if consider_orientation:
-            REWARD_SPACE_SIZE = 4
-        else:
-            REWARD_SPACE_SIZE = 9
-
-        def fitness_simple_boxes(reward_vector):
-            def gen_worlds():
-                possible_box_positions = list(itertools.combinations([
-                    0,
-                    SIDE_SIZE - 1,
-                    (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
-                    SIDE_SIZE * SIDE_SIZE - 1,
-                ], 2))
-                random.shuffle(possible_box_positions)
-                for p in possible_box_positions:
-                    yield BoxWorldSimple(side_size=SIDE_SIZE, box_positions=p)
-
-            fake_world = BoxWorldSimple(side_size=SIDE_SIZE)
-            fake_world.step = None
-            sensor_readings = gather_sensor_readings(fake_world.number_of_tiles, fake_world._walls, fake_world.width)
-            scores = []
-            for goal_idx, position_idx in enumerate(range(fake_world.number_of_tiles)):
-                sensor_reading = sensor_readings[position_idx]
-
-                if consider_orientation:
-                    north = [0, 1, 2, 4]
-                    north_mask = np.full((len(sensor_reading),), False)
-                    north_mask[north] = True
-
-                    east = [2, 4, 5, 8]
-                    east_mask = (np.full((len(sensor_reading),), False))
-                    east_mask[east] = True
-
-                    west = [0, 3, 4, 6]
-                    west_mask = (np.full((len(sensor_reading),), False))
-                    west_mask[west] = True
-
-                    south = [4, 6, 7, 8]
-                    south_mask = (np.full((len(sensor_reading),), False))
-                    south_mask[south] = True
-
-                    score = np.max((
-                        np.sum(reward_vector[sensor_reading[north_mask]]),
-                        np.sum(reward_vector[sensor_reading[east_mask]]),
-                        np.sum(reward_vector[sensor_reading[west_mask]]),
-                        np.sum(reward_vector[sensor_reading[south_mask]]),
-                    ))
-                else:
-                    score = np.sum(reward_vector[sensor_reading])
-
-                scores.append((goal_idx, score))
-
-            xs = [20 + 20*x for x in range(100)]
-            dxs = [xs[0], ] + [x - xs[idx] for idx, x in enumerate(xs[1:])]
-            possible_box_positions = list(itertools.combinations([
-                0,
-                SIDE_SIZE - 1,
-                (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
-                SIDE_SIZE * SIDE_SIZE - 1,
-                ], 2))
-            option_set_scores = BoxWorldSimple.eval_option_on_mdp(TEST_MAX_STEPS_EVAL, possible_box_positions, tuple(), dxs)
-            scores = sorted(scores, key=lambda x: x[1], reverse=True)
-
-            options = []
-            fitnesses = [option_set_scores[xs[0]]]
-
-            for goal_idx, goal_score in scores:
-                if goal_score < 0:
-                    break
-
-                option = tuple(learners.q_learning.learn_option(goal_idx, fake_world))
-                options.append(option)
-                options = sorted(options, key=lambda x: x.index(-1))
-
-                # eval options
-                cum_cum_reward = 0
-                possible_box_positions = list(itertools.combinations([
-                    0,
-                    SIDE_SIZE - 1,
-                    (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
-                    SIDE_SIZE * SIDE_SIZE - 1,
-                ], 2))
-                random.shuffle(possible_box_positions)
-                cum_cum_reward = [0] * len(xs)
-                for eval_step, box_positions in enumerate(possible_box_positions):
-                    option_set_scores = BoxWorldSimple.eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions, options, dxs)
-
-                    for x in xs:
-                        cum_cum_reward[xs.index(x)] += option_set_scores[x]
-                plt.plot(xs, cum_cum_reward)
-                plt.show()
-
-                fitness = cum_cum_reward / (eval_step + 1)
-                fitnesses.append(fitness)
-
-                #  print(reward_vector, end="")
-                option_names = []
-                for option in options:
-                    for idx, action in enumerate(option):
-                        if action == -1:
-                            option_names.append(idx)
-                            break
-
-                BoxWorldSimple.HACK += 1
-                if BoxWorldSimple.HACK % 10 == 0:
-                    fake_world.box_positions = (-1, -1)
-                    fake_world.agent_position_idx = -1
-                    opt_ids = [s[0] for s in scores][1:fitnesses.index(max(fitnesses))]
-                    fake_world.show_board(highlight_squares=opt_ids, info={'score': max(fitnesses)})
-                option_names = " ".join(str(n) for n in sorted(option_names))
-                print("score:\t{}\toptions: nr:{}\tnames:{}".format(fitnesses[-1], len(options), option_names))
-
-            return max(fitnesses)
-
-        def gather_sensor_readings(world_tiles, world_walls, world_width):
-            sensor_readings = [None, ] * world_tiles
-
-            for position_idx in range(world_tiles):
-                # tmp_world.show_board(highlight_square=position_idx)
-                can_reach = np.ones(shape=(3, 3), dtype=np.bool) * False
-
-                can_reach[1][1] = True
-
-                # can go up
-                up_position = position_idx - world_width
-                up_left_position = position_idx - world_width - 1
-                up_right_position = position_idx - world_width + 1
-                left_position = position_idx - 1
-                down_left_position = left_position + world_width
-                down_position = position_idx + world_width
-                down_right_position = down_position + 1
-                right_position = position_idx + 1
-
-                up_coord = (0, 1)
-                up_right_coord = (0, 2)
-                right_coord = (1, 2)
-                down_right_coord = (2, 2)
-                down_coord = (2, 1)
-                down_left_coord = (2, 0)
-                left_coord = (1, 0)
-                up_left_coord = (0, 0)
-
-                if up_position not in world_walls[position_idx]:
-                    can_reach[up_coord] = True
-                if left_position not in world_walls[position_idx]:
-                    can_reach[left_coord] = True
-                if down_position not in world_walls[position_idx]:
-                    can_reach[down_coord] = True
-                if right_position not in world_walls[position_idx]:
-                    can_reach[right_coord] = True
-
-                if can_reach[up_coord] and can_reach[left_coord]:
-                    if up_left_position not in world_walls[left_position].union(world_walls[up_position]):
-                        can_reach[up_left_coord] = True
-
-                if can_reach[down_coord] and can_reach[left_coord]:
-                    if down_left_position not in world_walls[left_position].union(world_walls[down_position]):
-                        can_reach[down_left_coord] = True
-
-                if can_reach[down_coord] and can_reach[right_coord]:
-                    if down_right_position not in world_walls[right_position].union(world_walls[down_position]):
-                        can_reach[down_right_coord] = True
-
-                if can_reach[up_coord] and can_reach[right_coord]:
-                    if up_right_position not in world_walls[right_position].union(world_walls[up_position]):
-                        can_reach[up_right_coord] = True
-
-                # if position_idx > 5:
-                #     plt.matshow(can_reach.reshape((3, 3)))
-                #     plt.show()
-
-                sensor_readings[position_idx] = can_reach.flatten()
-            return sensor_readings
-
-        return fitness_simple_boxes, REWARD_SPACE_SIZE
-
     @classmethod
     @disk_utils.disk_cache
     # @numba.jit
-    def eval_option_on_mdp(cls, TEST_MAX_STEPS_EVAL, box_positions, option_vec, dxs):
-        option_set_score = {}
-        mdp = cls(side_size=6, box_positions=box_positions)
-        learner = learners.q_learning.QLearning(env=mdp, options=option_vec, test_run=True)
-
-        training_steps = 0
-        fitness = 0
-        for test_max_steps_train in dxs:
-            _, cum_reward, fitness = learner.learn(max_steps=test_max_steps_train)
-            # doesn't work, terminate options bugs everything
-            # fitness = (cum_reward - test_max_steps_train) / 100
-
-            training_steps += test_max_steps_train
-            # cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL, render=False)
-            option_set_score[training_steps] = fitness
-        return option_set_score
+    def eval_option_on_mdp(cls, SIDE_SIZE, TEST_MAX_STEPS_EVAL, box_positions, option_vec, xs):
+        mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions)
+        learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
+        _, _, fitnesses = learner.learn(xs=xs)
+        return fitnesses
 
 
 if __name__ == "__main__":
