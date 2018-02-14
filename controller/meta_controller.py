@@ -69,8 +69,6 @@ class CMAES(object):
         return history
 
     def optimize(self):
-        import numpy as np
-        np.set_printoptions(precision=2)
         f_h = []
 
         fig = plt.gcf()
@@ -91,8 +89,8 @@ class CMAES(object):
             f_h.append(np.array(fitness_list).mean())
             # history.append(self.solver.result.fbest)
             print("*" * 30)
-            print("ran", len(solutions), "solutions, scores:", fitness_list)
-            print("best", str(self.solver.result.xbest).replace("\n", " "), "fitness", self.solver.result.fbest)
+            print("ran", len(solutions), "solutions, scores:", [int(f) for f in fitness_list])
+            print("best {0} fitness {1}".format(np.round(self.solver.result.xbest.reshape(3,3), 2), self.solver.result.fbest))
             print("sigma", str(self.solver.sigma))
             print("*" * 30)
             plt.plot(f_h)
