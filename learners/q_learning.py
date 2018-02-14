@@ -292,7 +292,7 @@ def main():
 
     option_set_score = {}
     mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=box_positions)
-    learner = QLearning(env=mdp, options=option_vec, test_run=True)
+    learner = QLearning(env=mdp, options=option_vec)
 
     training_time = 0
     testing_time = 0
@@ -301,7 +301,7 @@ def main():
         print(it)
         learner = QLearning(env=mdp, options=option_vec, test_run=False)
         time0 = time.time()
-        learner.learn(max_steps=10000, plot_speed=True)
+        learner.learn(xs=[10000,] , plot_speed=True)
         diff = (time.time() - time0)
         training_time += diff
 
@@ -323,7 +323,7 @@ def learn_option(goal, mdp):
         return 1 if goal == _mdp.agent_position_idx else -1
 
     learner = QLearning(env=mdp, options=None, surrogate_reward=surrogate_reward, goal=goal)
-    _ = learner.learn(max_steps=100000)
+    _ = learner.learn(xs=[100000, ])
     option = np.argmax(learner.Q, axis=1)
 
     state_idx = goal
