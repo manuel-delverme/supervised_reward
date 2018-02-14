@@ -94,6 +94,7 @@ class CMAES(object):
             print("sigma", str(self.solver.sigma))
             print("*" * 30)
             plt.plot(f_h)
-            fig.canvas.draw()
+            plt.savefig("fitness_history.png")
+            # fig.canvas.draw()
 
         return history
