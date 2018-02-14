@@ -1,4 +1,5 @@
 import matplotlib
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import controller.meta_controller
@@ -44,13 +45,11 @@ def gather_sensor_readings(world_tiles, world_walls, world_width):
     return sensor_readings
 
 
-def get_weight_evolution_fitness_fn(SIDE_SIZE, nr_options, plot_progress=False):
+def get_weight_evolution_fitness_fn(SIDE_SIZE):
     # sweep the state space
     # create n options as sorted(mask.dot(reward_vector))[:n]
-
     REWARD_SPACE_SIZE = 9
     TEST_MAX_STEPS_EVAL = 1000
-
     possible_box_positions = list(itertools.combinations([
         0,
         SIDE_SIZE - 1,
@@ -62,72 +61,83 @@ def get_weight_evolution_fitness_fn(SIDE_SIZE, nr_options, plot_progress=False):
     fake_world.step = None
     sensor_readings = gather_sensor_readings(fake_world.number_of_tiles, fake_world._walls, fake_world.width)
 
-    def fitness_simple_boxes(reward_vector):
-        scores = []
+    return sensor_readings, REWARD_SPACE_SIZE, TEST_MAX_STEPS_EVAL, possible_box_positions
 
-        for goal_idx, position_idx in enumerate(range(fake_world.number_of_tiles)):
-            sensor_reading = sensor_readings[position_idx]
-            score = np.sum(reward_vector[sensor_reading])
-            scores.append((goal_idx, score))
 
-        xs = [10 + 10 * x for x in range(200)]
-        scores = sorted(scores, key=lambda x: x[1], reverse=True)
+def fitness_simple_boxes(args):
+    reward_vector, SIDE_SIZE, sensor_readings, nr_options, possible_box_positions, TEST_MAX_STEPS_EVAL, plot_progress = args
+    number_of_tiles = SIDE_SIZE * SIDE_SIZE
+    scores = []
+    for goal_idx, position_idx in enumerate(range(number_of_tiles)):
+        sensor_reading = sensor_readings[position_idx]
+        score = np.sum(reward_vector[sensor_reading])
+        scores.append((goal_idx, score))
 
-        options = []
+    xs = [10 + 10 * x for x in range(200)]
+    scores = sorted(scores, key=lambda x: x[1], reverse=True)
 
-        for goal_idx, goal_score in scores[:nr_options]:
-            option = tuple(learners.q_learning.learn_option(goal_idx, e.BoxWorldSimple(side_size=SIDE_SIZE)))
-            options.append(option)
-            options = sorted(options, key=lambda x: x.index(-1))
+    options = []
 
-        # eval options
-        cum_cum_reward = np.zeros(len(xs))
-        for eval_step, box_positions in enumerate(possible_box_positions):
-            option_set_scores = e.BoxWorldSimple.eval_option_on_mdp(SIDE_SIZE, TEST_MAX_STEPS_EVAL, box_positions,
-                                                                    options, xs)
-            # print(option_set_scores)
-            cum_cum_reward += np.array(option_set_scores)
+    for goal_idx, goal_score in scores[:nr_options]:
+        option = tuple(learners.q_learning.learn_option(goal_idx, e.BoxWorldSimple(side_size=SIDE_SIZE)))
+        options.append(option)
+        options = sorted(options, key=lambda x: x.index(-1))
 
-        if plot_progress:
-            #  print(reward_vector, end="")
-            option_names = []
-            for option in options:
-                for idx, action in enumerate(option):
-                    if action == -1:
-                        option_names.append(idx)
-                        break
+    # eval options
+    cum_cum_reward = np.zeros(len(xs))
+    for eval_step, box_positions in enumerate(possible_box_positions):
+        option_set_scores = e.BoxWorldSimple.eval_option_on_mdp(SIDE_SIZE, TEST_MAX_STEPS_EVAL, box_positions,
+                                                                options, xs)
+        # print(option_set_scores)
+        cum_cum_reward += np.array(option_set_scores)
 
-            # BoxWorldSimple.HACK += 1
-            # if BoxWorldSimple.HACK % 10 == 0:
-            #     fake_world.box_positions = (-1, -1)
-            #     fake_world.agent_position_idx = -1
-            #     opt_ids = [s[0] for s in scores][1:fitnesses.index(max(fitnesses))]
-            #     fake_world.show_board(highlight_squares=opt_ids, info={'score': max(fitnesses)})
-            option_names = " ".join(str(n) for n in sorted(option_names))
-            ys = cum_cum_reward / (eval_step + 1)
-            plt.plot(xs, ys)
-            plt.title(option_names)
-            plt.show()
-        return cum_cum_reward[-1] / (eval_step + 1)
+    if plot_progress:
+        #  print(reward_vector, end="")
+        option_names = []
+        for option in options:
+            for idx, action in enumerate(option):
+                if action == -1:
+                    option_names.append(idx)
+                    break
 
-    return fitness_simple_boxes, REWARD_SPACE_SIZE
+        # BoxWorldSimple.HACK += 1
+        # if BoxWorldSimple.HACK % 10 == 0:
+        #     fake_world.box_positions = (-1, -1)
+        #     fake_world.agent_position_idx = -1
+        #     opt_ids = [s[0] for s in scores][1:fitnesses.index(max(fitnesses))]
+        #     fake_world.show_board(highlight_squares=opt_ids, info={'score': max(fitnesses)})
+        option_names = " ".join(str(n) for n in sorted(option_names))
+        ys = cum_cum_reward / (eval_step + 1)
+        plt.plot(xs, ys)
+        plt.title(option_names)
+        plt.show()
+    return cum_cum_reward[-1] / (eval_step + 1)
 
 
 def evolve_weights(nr_options):
     POPULATION_SIZE = 6
     SIDE_SIZE = 7
-    fitness_fn, reward_space_size = get_weight_evolution_fitness_fn(SIDE_SIZE, nr_options)
-
+    plot_progress = False
+    sensor_readings, reward_space_size, TEST_MAX_STEPS_EVAL, possible_box_positions = get_weight_evolution_fitness_fn(
+        SIDE_SIZE)
     regressor = controller.meta_controller.CMAES(
         population_size=POPULATION_SIZE,
-        fitness_function=fitness_fn,
+        fitness_function=fitness_simple_boxes,
         reward_space_size=reward_space_size,
+        default_args=[
+            SIDE_SIZE, sensor_readings, nr_options, possible_box_positions, TEST_MAX_STEPS_EVAL, plot_progress
+        ],
     )
     return regressor.optimize()
 
 
-if __name__ == "__main__":
-    scores = {}
+def main():
+    scores = {
+        5: evolve_weights(nr_options=5)
+    }
     # for nr_options in range(6):
     #    scores[nr_options] = evolve_weights(nr_options)
-    scores[4] = evolve_weights(nr_options=5)
+
+
+if __name__ == "__main__":
+    main()

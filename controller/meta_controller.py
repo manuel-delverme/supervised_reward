@@ -4,12 +4,15 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import cma
 import es
+import multiprocessing
 
 import random
 
 
 class CMAES(object):
-    def __init__(self, reward_space_size, population_size, fitness_function):
+    def __init__(self, reward_space_size, population_size, fitness_function, default_args):
+        self.population_size = population_size
+        self.default_args = default_args
         self.solver = cma.CMAEvolutionStrategy(
             x0=reward_space_size * [0],
             sigma0=0.1,
@@ -76,17 +79,21 @@ class CMAES(object):
         fig.show()
         fig.canvas.draw()
 
+        pool = multiprocessing.Pool(processes=self.population_size)
         while True:
             solutions = self.solver.ask()
-            fitness_list = []
+            # fitness_list = []
             # bins = np.array([-0.99, -0.5, 0.0, 0.5, 0.99]) - 0.25
             # inds = [bins[idx - 1] + 0.25 for idx in np.digitize(solutions, bins)]
             # solutions = inds
-            for solution in solutions:
-                fitness = self.fitness_function(solution)
-                fitness_list.append(-fitness)
+            # for solution in solutions:
+            #     fitness = self.fitness_function(solution)
+            #     fitness_list.append(-fitness)
+            args = ([s] + self.default_args for s in solutions)
+            fitness_list = pool.map(self.fitness_function, args)
+
             # print(fitness_list)
-            self.solver.tell(solutions, fitness_list)
+            self.solver.tell(solutions, [-f for f in fitness_list])
             f_h.append(-np.array(fitness_list).mean())
             # history.append(self.solver.result.fbest)
             print("*" * 30)
@@ -98,4 +105,5 @@ class CMAES(object):
             plt.savefig("fitness_history.png")
             # fig.canvas.draw()
 
+        pool.close()
         return history
