@@ -278,7 +278,7 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         return fitness_simple_boxes
 
     @classmethod
-    # @disk_utils.disk_cache
+    @disk_utils.disk_cache
     def eval_option_on_mdp(cls, SIDE_SIZE, box_positions, option_vec, xs):
         mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions)
         learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
