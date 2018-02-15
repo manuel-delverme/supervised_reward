@@ -23,7 +23,6 @@ class QLearning(object):
         #     'self.cumulative_reward' : 0,
         #     'self.terminal' : True,
         # }
-
         self.goal = goal
         self.epsilon = epsilon
         self.starting_epsilon = epsilon
@@ -60,7 +59,6 @@ class QLearning(object):
                 # print("policy pick", action_idx)
             else:
                 action_idx = random.randint(0, self.nr_primitive_actions - 1)
-
                 while self.is_option(action_idx) and self.available_actions[action_idx][state] == TERMINATE_OPTION:
                     action_idx = random.randint(0, self.nr_primitive_actions - 1)
 

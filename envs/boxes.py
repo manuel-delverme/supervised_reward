@@ -123,13 +123,13 @@ class BoxWorld(envs.gridworld.GridWorld):
             policy=policy,
             highlight_square=highlight_square,
             info=info,
-            state_offset=self.num_tiles * (self._hash_state() // self.num_tiles),
+            state_offset=self.number_of_tiles * (self._hash_state() // self.number_of_tiles),
             just_numbers=True
         )
 
     def force_state(self, state):
         # TODO: remove, will cause bugs
-        super(BoxWorld, self).teleport_agent(state % self.num_tiles)
+        super(BoxWorld, self).teleport_agent(state % self.number_of_tiles)
 
     @staticmethod
     def get_fitness_fn(SIDE_SIZE):

@@ -10,56 +10,33 @@ import envs.hungry_thirsty
 import envs.simple_boxes
 import learners.double_q_learning
 import learners.q_learning
+import options_utils
 
 
-@disk_utils.disk_cache
+# @disk_utils.disk_cache
 def bruteforce_options():
-    scores = {}
-    number_of_options = 4
-    TEST_MAX_STEPS_EVAL = 500
-    SIDE_SIZE = 6
-    scores = collections.defaultdict(dict)
-
-    option_sets = itertools.combinations([None] * (number_of_options) + list(range(36)), number_of_options)
+    NUMBER_OF_OPTIONS = 4
+    SIDE_SIZE = 7
+    option_sets = itertools.combinations([None] * NUMBER_OF_OPTIONS + list(range(SIDE_SIZE * SIDE_SIZE)), NUMBER_OF_OPTIONS)
     option_sets = list(option_sets)
-    random.shuffle(option_sets)
+    # random.shuffle(option_sets)
+
+    xs = [10 + 10 * x for x in range(800)]
     possible_box_positions = list(itertools.combinations([0, SIDE_SIZE - 1, (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
                                                           SIDE_SIZE * SIDE_SIZE - 1, ], 2))
 
-    xs = [2, 16, 32, 64, 128, 256, 512, 1024, 2048, 10000]
-    dxs = [xs[0], ] + [x - xs[idx] for idx, x in enumerate(xs[1:])]
-
-    progress = tqdm.tqdm(total=len(option_sets) * len(xs))
-
-    token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=(1, 2))
-    learner = learners.double_q_learning.QLearning(env=token_mdp, options=[], test_run=True)
+    token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=SIDE_SIZE)
+    learner = learners.q_learning.QLearning(env=token_mdp, options=[])
 
     option_map = {tuple(): tuple()}
+    for goal_idx in range(token_mdp.number_of_tiles):
+        option_map[goal_idx] = options_utils.goal_to_policy(learner, goal_idx, token_mdp)
 
-    for o in range(36):
-        token_mdp.agent_position_idx = o
-        learner.generate_option()
-        option_vec = tuple(learner.available_actions[-1])
-        option_map[o] = option_vec
-        # token_mdp.show_board(policy=np.array(option_vec), highlight_square=o)
-
-    option_sets = [tuple(o) for o in option_sets]
-    option_sets = [tuple(o for o in option_set if o is not None) for option_set in option_sets]
-    option_vecs = [tuple(option_map[o] for o in option_set) for option_set in option_sets]
-
-    # import ipdb; ipdb.set_trace()
-    for option_ids, option_vec in zip(option_sets, option_vecs):
-        cum_scores = collections.defaultdict(float)
-        for eval_step, box_positions in enumerate(possible_box_positions):
-            option_set_score = envs.simple_boxes.BoxWorldSimple.eval_option_on_mdp(TEST_MAX_STEPS_EVAL, box_positions,
-                                                                                   option_vec, dxs)
-
-            for k in option_set_score.keys():
-                cum_scores[k] += option_set_score[k]
-            progress.update(1)
-        scores[option_ids] = dict(cum_scores)
-        # print_statistics(fitness, option_set)
-    return scores
+    option_sets_scores = {}
+    for option_set in tqdm.tqdm(option_sets):
+        options = [option_map[goal_idx] for goal_idx in option_set if goal_idx is not None]
+        option_sets_scores[option_set] = options_utils.eval_options(SIDE_SIZE, options, possible_box_positions, xs)
+    return option_sets_scores
 
 
 def plot_option_scores():

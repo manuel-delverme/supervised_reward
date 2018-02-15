@@ -121,16 +121,16 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
             highlight_square=highlight_square,
             highlight_squares=highlight_squares,
             info=info,
-            state_offset=self.num_tiles * (self._hash_state() // self.num_tiles),
+            state_offset=self.number_of_tiles * (self._hash_state() // self.number_of_tiles),
             action_names=action_names,
         )
 
     def __repr__(self):
-        return "<BoxWorld {} instance>".format(self.num_tiles)
+        return "<BoxWorld {} instance>".format(self.number_of_tiles)
 
     def __str__(self):
         # TODO: dirrrty
-        return "<BoxWorld {} instance>".format(self.num_tiles)
+        return "<BoxWorld {} instance>".format(self.number_of_tiles)
 
     @staticmethod
     def get_fitness_fn(SIDE_SIZE):
@@ -278,9 +278,8 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         return fitness_simple_boxes
 
     @classmethod
-    @disk_utils.disk_cache
-    # @numba.jit
-    def eval_option_on_mdp(cls, SIDE_SIZE, TEST_MAX_STEPS_EVAL, box_positions, option_vec, xs):
+    # @disk_utils.disk_cache
+    def eval_option_on_mdp(cls, SIDE_SIZE, box_positions, option_vec, xs):
         mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions)
         learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
         _, _, fitnesses = learner.learn(xs=xs)

@@ -104,6 +104,5 @@ class CMAES(object):
             plt.plot(f_h)
             plt.savefig("fitness_history.png")
             # fig.canvas.draw()
-
         pool.close()
         return history

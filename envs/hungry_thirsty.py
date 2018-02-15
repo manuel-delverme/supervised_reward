@@ -105,7 +105,7 @@ class HungryThirsty(envs.gridworld.GridWorld):
             policy=policy,
             highlight_square=highlight_square,
             info=info,
-            state_offset=self.num_tiles * (self._hash_state() // self.num_tiles)
+            state_offset=self.number_of_tiles * (self._hash_state() // self.number_of_tiles)
         )
 
     def force_state(self, state):
