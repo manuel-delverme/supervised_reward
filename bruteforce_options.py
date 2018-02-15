@@ -13,7 +13,7 @@ import learners.q_learning
 import options_utils
 
 
-# @disk_utils.disk_cache
+@disk_utils.disk_cache
 def bruteforce_options():
     NUMBER_OF_OPTIONS = 4
     SIDE_SIZE = 7
@@ -22,8 +22,7 @@ def bruteforce_options():
     possible_tiles = [position_idx for position_idx in range(token_mdp.number_of_tiles) if position_idx not in token_mdp._walls]
     option_sets = itertools.combinations([None] * NUMBER_OF_OPTIONS + possible_tiles, NUMBER_OF_OPTIONS)
     option_sets = list(option_sets)
-
-    # random.shuffle(option_sets)
+    random.shuffle(option_sets)
 
     xs = [10 + 10 * x for x in range(1000)]
     possible_box_positions = list(itertools.combinations([0, SIDE_SIZE - 1, (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,

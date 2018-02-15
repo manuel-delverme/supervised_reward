@@ -321,7 +321,7 @@ def learn_option(goal, mdp):
         return 1 if goal == _mdp.agent_position_idx else -1
 
     learner = QLearning(env=mdp, options=None, surrogate_reward=surrogate_reward, goal=goal)
-    _ = learner.learn(xs=[100000, ])
+    _ = learner.learn(xs=[200000, ])
     option = np.argmax(learner.Q, axis=1)
 
     state_idx = goal
