@@ -47,14 +47,17 @@ def plot_option_scores():
     top_scorers = {}
     worst_scorers = {}
     score_history = {}
+    xs = [10 + 10 * x for x in range(1000)]
     for option_ids, option_scores in scores.items():
-        for nr_iter, option_score in option_scores.items():
+        for score_idx, nr_iter in enumerate(xs):
+            option_score = option_scores[score_idx]
             top_scorers[nr_iter] = (option_ids, option_score)
             worst_scorers[nr_iter] = (option_ids, option_score)
             score_history[nr_iter] = []
         break
     for option_ids, option_scores in scores.items():
-        for nr_iter, option_score in option_scores.items():
+        for score_idx, nr_iter in enumerate(xs):
+            option_score = option_scores[score_idx]
             if top_scorers[nr_iter][1] < option_score:
                 top_scorers[nr_iter] = (option_ids, option_score)
             if worst_scorers[nr_iter][1] > option_score:
