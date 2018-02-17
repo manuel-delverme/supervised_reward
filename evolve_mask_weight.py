@@ -68,7 +68,7 @@ def fitness_simple_boxes(args):
     options = options_utils.select_options(SIDE_SIZE, nr_options, number_of_tiles, reward_vector, sensor_readings)
 
     # eval options
-    fitnesses = options_utils.eval_options(SIDE_SIZE, TEST_MAX_STEPS_EVAL, options, possible_box_positions, xs)
+    fitnesses = options_utils.eval_options(SIDE_SIZE, options, possible_box_positions, xs)
     option_names = options_utils.name_options(options)
 
     if plot_progress:
