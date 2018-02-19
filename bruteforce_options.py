@@ -47,7 +47,6 @@ def plot_option_scores():
     top_scorers = {}
     worst_scorers = {}
     score_history = {}
-    import ipdb; ipdb.set_trace()
     xs = [10 + 10 * x for x in range(1000)]
     for option_ids, option_scores in scores.items():
         for score_idx, nr_iter in enumerate(xs):
@@ -71,11 +70,6 @@ def plot_option_scores():
     xs = sorted(score_history.keys())
     for x in xs:
         data.append(score_history[x])
-    sum = 0
-    indices = []
-    for dx in xs:
-        sum += dx
-        indices.append(sum)
 
     plt.figure(1)
     y_low, y_high = worst_scorers[100][1], top_scorers[100][1]
@@ -113,10 +107,12 @@ def plot_option_scores():
 
     ys = [percentiles[percentiles_ranges.index(100)][nr_iter] for nr_iter in xs]
     plt.plot(x_labels, ys, 'o', label="best")
+    plt.savefig("best.png")
 
     no_options = scores[()]
     ys = [no_options[x] for x in xs]
     plt.plot(x_labels, ys, label="no options")
+    plt.savefig("no options.png")
 
     # ys = [percentiles[percentiles_ranges.index(1)][nr_iter] for nr_iter in xs]
     # plt.plot(x_labels, ys, label="perc:1%")
@@ -126,15 +122,17 @@ def plot_option_scores():
 
     ys = [percentiles[percentiles_ranges.index(50)][nr_iter] for nr_iter in xs]
     plt.plot(x_labels, ys, label="perc:50%")
+    plt.savefig("perc:50%.png")
 
     # ys = [percentiles[percentiles_ranges.index(95)][nr_iter] for nr_iter in xs]
     # plt.plot(x_labels, ys, label="perc:95%")
 
     ys = [percentiles[percentiles_ranges.index(99)][nr_iter] for nr_iter in xs]
     plt.plot(x_labels, ys, label="perc:99%")
+    plt.savefig("perc:99%.png")
 
-    plt.legend(loc='upper left')
-    plt.show()
+    # plt.legend(loc='upper left')
+    # plt.show()
 
     cutoff = {nr_iter: percentiles[percentiles_ranges.index(99.9)][nr_iter] for nr_iter in xs}
     best_sets = {}
@@ -153,11 +151,11 @@ def plot_option_scores():
     import pprint
     pprint.pprint(best_sets)
 
-    mdp = envs.boxes.BoxWorld(side_size=6, box_positions=())
-    mdp.show_board(just_numbers=True)
-    input("enjoy")
+    # mdp = envs.boxes.BoxWorld(side_size=6, box_positions=())
+    # mdp.show_board(just_numbers=True)
+    # input("enjoy")
 
-    # df = pd.DataFrame(data, index=indices)
+    # df = pd.DataFrame(data, index=xs)
     # df.groupby(axis=1)
 
     # df.describe()
