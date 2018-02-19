@@ -81,6 +81,7 @@ class CMAES(object):
 
         pool = multiprocessing.Pool(processes=self.population_size)
         while True:
+            print("asking")
             solutions = self.solver.ask()
             # fitness_list = []
             # bins = np.array([-0.99, -0.5, 0.0, 0.5, 0.99]) - 0.25
@@ -90,10 +91,11 @@ class CMAES(object):
             #     fitness = self.fitness_function(solution)
             #     fitness_list.append(-fitness)
             args = ([s] + self.default_args for s in solutions)
-            fitness_list = pool.map(self.fitness_function, args)
-
-            # print(fitness_list)
-            self.solver.tell(solutions, [-f for f in fitness_list])
+            # async is not needded since **cache is up**
+            # fitness_list = pool.map(self.fitness_function, args)
+            fitness_list = list(map(self.fitness_function, args))
+            results = [-f for f in fitness_list]
+            self.solver.tell(solutions, results)
             f_h.append(-np.array(fitness_list).mean())
             # history.append(self.solver.result.fbest)
             print("*" * 30)
@@ -103,6 +105,7 @@ class CMAES(object):
             print("*" * 30)
             plt.plot(f_h)
             plt.savefig("fitness_history.png")
+            print("fig saved")
             # fig.canvas.draw()
         pool.close()
         return history
