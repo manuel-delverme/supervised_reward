@@ -9,7 +9,7 @@ import learners.q_learning
 
 
 def evolve_intrinsic():
-    POPULATION_SIZE = 6  # if < 6 cmaes mirrors, disable that (?)
+    POPULATION_SIZE = 8  # if < 6 cmaes mirrors, disable that (?)
     TRAINING_NO_CHANGE_STOP = 1000
     GENERATE_RANDOM_OPTIONS = False
     TRAINING_MAX_STEPS = 10000

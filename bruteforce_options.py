@@ -14,7 +14,7 @@ import options_utils
 
 
 @disk_utils.disk_cache
-def bruteforce_options():
+def bruteforce_options4():
     NUMBER_OF_OPTIONS = 4
     SIDE_SIZE = 7
     token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=SIDE_SIZE)
@@ -42,11 +42,12 @@ def bruteforce_options():
 
 
 def plot_option_scores():
-    scores = bruteforce_options()
+    scores = bruteforce_options4()
 
     top_scorers = {}
     worst_scorers = {}
     score_history = {}
+    import ipdb; ipdb.set_trace()
     xs = [10 + 10 * x for x in range(1000)]
     for option_ids, option_scores in scores.items():
         for score_idx, nr_iter in enumerate(xs):
