@@ -64,7 +64,7 @@ def get_weight_evolution_fitness_fn(SIDE_SIZE):
 def fitness_simple_boxes(args):
     reward_vector, SIDE_SIZE, sensor_readings, nr_options, possible_box_positions, TEST_MAX_STEPS_EVAL, plot_progress = args
     number_of_tiles = SIDE_SIZE * SIDE_SIZE
-    xs = [10 + 10 * x for x in range(200)]
+    xs = [10 + 10 * x for x in range(10000)]
     options = options_utils.select_options(SIDE_SIZE, nr_options, number_of_tiles, reward_vector, sensor_readings)
 
     # eval options
