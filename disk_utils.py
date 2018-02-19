@@ -1,20 +1,20 @@
 import pickle
 import sys
 import os
-# from functools import lru_cache
-# @lru_cache(maxsize=1024)
+from functools import lru_cache
 import hashlib
 import gzip
 
 
 def disk_cache(function):
-    # @lru_cache(maxsize=1024)
     def wrapper(*args, **kwargs):
         if not os.path.exists("cache/"):
             print("[DISK_CACHE] creating cache dir")
             os.makedirs("cache/")
 
         fid = function.__name__
+        if fid == "eval_option_on_mdp":
+            args = tuple((args[0], args[1], args[2], list(args[3]), list(args[4])))
         cache_file = "cache/{}".format(fid)
         if args:
             if not os.path.exists(cache_file):
@@ -34,20 +34,9 @@ def disk_cache(function):
             with gzip.open(cache_file, "rb") as fin:
                 retr = pickle.load(fin)
         except FileNotFoundError:
-            try:
-                # OLD STYLE
-                with open(cache_file[:-3], "rb") as fin:
-                    retr = pickle.load(fin)
-            except (FileNotFoundError, OSError):
-                retr = function(*args, **kwargs)
+            retr = function(*args, **kwargs)
 
             with gzip.open(cache_file, "wb") as fout:
                 pickle.dump(retr, fout)
-
-            try:
-                os.remove(cache_file[:-3])
-                print("removed old file", cache_file[:-3])
-            except Exception:
-                pass
         return retr
     return wrapper
