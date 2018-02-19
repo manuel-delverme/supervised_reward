@@ -108,3 +108,6 @@ tags
 env_reward
 cache
 .idea
+
+# plots
+*.png
