@@ -27,13 +27,13 @@ def bruteforce_options4():
     xs = [10 + 10 * x for x in range(1000)]
     possible_box_positions = list(itertools.combinations([0, SIDE_SIZE - 1, (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
                                                           SIDE_SIZE * SIDE_SIZE - 1, ], 2))
-
     learner = learners.q_learning.QLearning(env=token_mdp, options=[])
 
     option_map = {tuple(): tuple()}
     for goal_idx in range(token_mdp.number_of_tiles):
         option_map[goal_idx] = options_utils.goal_to_policy(learner, goal_idx, token_mdp)
 
+    # import ipdb, ipdb.set_trace()
     option_sets_scores = {}
     for option_set in tqdm.tqdm(option_sets):
         options = [option_map[goal_idx] for goal_idx in option_set if goal_idx is not None]

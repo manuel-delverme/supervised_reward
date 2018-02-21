@@ -280,55 +280,10 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
     @classmethod
     @disk_utils.disk_cache
     def eval_option_on_mdp(cls, SIDE_SIZE, box_positions, option_vec, xs):
+        # print("CACHE MISS! shouldn't happen")
+        # import ipdb; ipdb.set_trace()
+        assert False
         mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions)
         learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
         _, _, fitnesses = learner.learn(xs=xs)
         return fitnesses
-
-
-if __name__ == "__main__":
-    import time
-    import os
-    import timeit
-
-    os.chdir("../")
-
-    test_world = BoxWorldSimple(side_size=6, )
-    test_world.show_board = lambda: None
-
-    test_world.reset()
-    test_world.show_board()
-    time.sleep(0.2)
-    test_world.teleport_agent(0)
-    test_world.show_board()
-    time.sleep(0.2)
-    # sequence = [envs.boxes.BoxWorldActions.DOWN] * 6 + \
-    #            [envs.boxes.BoxWorldActions.RIGHT] * 6 + \
-    #            [envs.boxes.BoxWorldActions.UP] * 6 + \
-    #            [envs.boxes.BoxWorldActions.LEFT] * 6
-
-    period = 1 / 60
-    timeit.timeit()
-    #   def timeit(stmt="pass", setup="pass", timer=default_timer, number=default_number, globals=None):
-
-    """
-    for action in sequence:
-        test_world.step(action.value)
-        test_world.show_board()
-        time.sleep(period)
-    """
-
-    its = 100000
-    for _ in range(int(its / 10)):
-        action = random.choice(list(BoxWorldActions))
-        test_world.step(action.value)
-        # test_world.show_board()
-        # time.sleep(period)
-    time0 = time.time()
-    for _ in range(its):
-        action = random.choice(list(BoxWorldActions))
-        test_world.step(action.value)
-        # test_world.show_board()
-        # time.sleep(period)
-    diff = (time.time() - time0)
-    print("speed", diff)
