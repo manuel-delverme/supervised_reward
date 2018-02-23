@@ -25,8 +25,6 @@ class _BoxState(enum.Enum):
 
 
 class BoxWorldSimple(envs.gridworld.GridWorld):
-    HACK = 0
-
     def __init__(self, side_size, box_positions=(), agent_lifetime=5):
         super(BoxWorldSimple, self).__init__(side_size, terminal_states=(), base_transition_probability=0.9,)
         self._lifetime = agent_lifetime

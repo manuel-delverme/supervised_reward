@@ -1,13 +1,9 @@
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
-import tqdm
+import collections
 import matplotlib.pyplot as plt
 import cma
-import es
 import multiprocessing
-
-import random
+import envs.simple_boxes
 
 
 class CMAES(object):
@@ -19,93 +15,111 @@ class CMAES(object):
             sigma0=0.1,
             inopts={
                 'popsize': population_size,
-                'bounds': [-2, 2],
+                'bounds': [-0.6, 0.6],
                 'minstd': 0.05,
+                'CMA_diagonal':  False,
                 # 'integer_variables': [0, 1, 2, 3, 4, 5, 6, 7, 8],
             }
         )
         self.fitness_function = fitness_function
 
-    def hand_optimize(self):
-        with open("/tmp/fitnesses.log", "w") as fout:
-            pass
-
-        lambda0 = 4
-        mean = None
-        step_size = None
-        covariance = np.identity(5)
-        evolution_path_sigma = 0
-        evolution_path_c = 0
-
-        while True:
-            results = []
-            for i in range(1, lambda0):
-                xi = np.random.multivariate_normal(mean=mean, cov=np.power(step_size, 2) * covariance)
-                fitness = self.fitness_function(xi)
-                results.append((xi, fitness))
-
-            # can be skipped by heap
-            results = sorted(results, key=lambda x: x[1])
-
-            weights = np.array([1, 2, 3, 4, 5])
-            weights /= weights.sum()
-
-            x = [xi for xi, f in results]
-            m_prime = mean
-            # mean =
-
-            # evolution_path_sigma = update_psigma
-            # evolution_path_c = update_pc
-            # covariance = update_C
-            # step_size = update_sigma
-
-            solutions = self.solver.ask()
-            fitness_list = []
-            for solution in solutions:
-                fitness_list.append(fitness)
-                with open("/tmp/fitnesses.log", "a") as fout:
-                    fout.write(str(fitness) + "\n")
-            print(fitness_list)
-            self.solver.tell(solutions, fitness_list)
-            # history.append(self.solver.result.fbest)
-            print("best", str(self.solver.result.xbest).replace("\n", " "), "fitness", self.solver.result.fbest)
-            print("sigma", str(self.solver.sigma))
-            # cma.plot()  # shortcut for es.logger.plot()
-        return history
-
     def optimize(self):
         f_h = []
+        fbest_h = []
+        sigma_h = []
 
-        fig = plt.gcf()
-        fig.show()
-        fig.canvas.draw()
+        # fig.show()
+        # fig.canvas.draw()
+        fig, (fitness_ax, sigma_ax) = plt.subplots(nrows=2)
+
+        SIDE_SIZE = self.default_args[0]
+        time_budget = self.default_args[-2]
+
+        import bruteforce_options
+        scores = bruteforce_options.bruteforce_options()
+        no_options = scores[(None, None, None, None)][int(time_budget / 10)]
+
+        f_h_deque = collections.deque(maxlen=5)
+        import glob
+        try:
+            experiment_id = max([int(n[15:-4]) for n in glob.glob("fitness_history*.png")]) + 1
+        except:
+            experiment_id = 0
 
         pool = multiprocessing.Pool(processes=self.population_size)
         while True:
-            solutions = self.solver.ask()
-            # fitness_list = []
-            # bins = np.array([-0.99, -0.5, 0.0, 0.5, 0.99]) - 0.25
-            # inds = [bins[idx - 1] + 0.25 for idx in np.digitize(solutions, bins)]
-            # solutions = inds
-            # for solution in solutions:
-            #     fitness = self.fitness_function(solution)
-            #     fitness_list.append(-fitness)
-            args = ([s] + self.default_args for s in solutions)
+            solutions_ = self.solver.ask()
+            solutions_clip = np.clip(solutions_, -0.6, 0.6)
+            solutions = self.scalar_to_coords(SIDE_SIZE, solutions_clip)
+            args = ((s,) + self.default_args for s in solutions)
+
             # async is not needded since **cache is up**, but cache is so slow (gzip?)
-            # fitness_list = pool.map(self.fitness_function, args)
-            print("TODO: RE-ENABLE ASYNC")
-            fitness_list = list(map(self.fitness_function, args))
+            # TODO: with pool as pool
+            fitness_list = pool.map(self.fitness_function, args)
+            # fitness_list = list(map(self.fitness_function, args))
+
             results = [-f for f in fitness_list]
-            self.solver.tell(solutions, results)
-            f_h.append(-np.array(fitness_list).mean())
+            self.solver.tell(solutions_, results)
+            fitness_list = np.array(fitness_list)
+            f_h_deque.append(fitness_list.mean())
+            f_h.append(sum(f_h_deque)/len(f_h_deque))
+            fbest_h.append(-self.solver.result.fbest)
             # history.append(self.solver.result.fbest)
+            mask = np.ones(shape=(7, 7), dtype=np.str)
+            mask[:] = ' '
+
+            for w in envs.simple_boxes.BoxWorldSimple._walls:
+                x = w % 7
+                y = w // 7
+                mask[x, y] = '|'
+            best_mask = mask.copy()
+            for coords_vec in solutions:
+                for g in coords_vec:
+                    if g[0] + g[1] * 7 in envs.simple_boxes.BoxWorldSimple._walls:
+                        mask[g[0]][g[1]] = '*'
+                    else:
+                        mask[g[0]][g[1]] = 'X'
+
+            for s in self.scalar_to_coords(SIDE_SIZE, [self.solver.result.xbest]):
+                for g in s:
+                    if g[0] + g[1] * 7 in envs.simple_boxes.BoxWorldSimple._walls:
+                        best_mask[g[0]][g[1]] = '*'
+                    else:
+                        best_mask[g[0]][g[1]] = 'X'
+
+            pop_fitness = fitness_list[fitness_list > 0].mean()
+            sigma_h.append(sum(abs(self.solver.sm.variances))/len(self.solver.sm.variances))
+            print("clip:", np.square(solutions_clip - solutions_).sum())
             print("*" * 30)
-            print("ran", len(solutions), "solutions, scores:", [int(f) for f in fitness_list])
-            print("best mask: \n{0}\n fitness {1}".format(np.round(self.solver.result.xbest.reshape(-1,2), 2), self.solver.result.fbest))
-            print("sigma", str(self.solver.sigma))
+            print("population: \n{0}\n fitness {1}\n".format(mask.transpose(), np.round(pop_fitness, 2)))
+            for s, s_, f in zip(solutions, solutions_, fitness_list):
+                print(str(s.ravel()).replace("\n", ""), str((SIDE_SIZE - 1) * (0.5 + s_).ravel()).replace("\n", ""), ":", f)
+            print("best: \n{0}\n fitness {1}".format(best_mask.transpose(), np.round(-self.solver.result.fbest, 2)))
+            print("sigma", np.round(self.solver.sm.variances, 2))
             print("*" * 30)
-            plt.plot(f_h)
-            plt.savefig("fitness_history.png")
+            # fitness_ax.cla()
+            # fitness_ax.ylim(-100, 100)
+            # fitness_ax.set_ylim([-, no_options * 2])
+            fitness_ax.plot(fbest_h)
+            fitness_ax.plot(f_h)
+            # TODO: plot bruteforce optimal
+            # TODO: why is no_options not showing? overlap?
+            fitness_ax.plot(no_options)
+            fitness_ax.set_title("fitness")
+
+            # sigma_ax.ylim(0, 100)
+            sigma_ax.plot(sigma_h)
+            # sigma_ax.set_ylim([0, 20])
+            sigma_ax.set_title("sum(sigmas)")
+
+            # Tweak spacing between subplots to prevent labels from overlapping
+            plt.subplots_adjust(hspace=0.5)
+            # fig.show()
+            fig.savefig("fitness_history{}.png".format(experiment_id))
             # fig.canvas.draw()
         pool.close()
         return history
+
+    def scalar_to_coords(self, SIDE_SIZE, solutions_):
+        solutions = [np.clip(SIDE_SIZE * (s + 0.5), 0, SIDE_SIZE - 1).reshape(-1, 2).astype(np.int) for s in solutions_]
+        return solutions

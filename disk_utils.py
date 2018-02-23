@@ -1,7 +1,6 @@
 import pickle
 import sys
 import os
-from functools import lru_cache
 import hashlib
 import gzip
 
@@ -37,7 +36,11 @@ def disk_cache(function):
             if not os.path.exists(cache_file):
                 cache_folder = cache_file[:cache_file.rindex("/")]
                 os.makedirs(cache_folder, exist_ok=True)
-            with gzip.open(cache_file, "wb") as fout:
+            if function.__name__ == "gather_stats":
+                storage_fn = open
+            else:
+                storage_fn = gzip.open
+            with storage_fn(cache_file, "wb") as fout:
                 pickle.dump(retr, fout)
         return retr
 
