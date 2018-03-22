@@ -71,7 +71,7 @@ class GUI(object):
     def render_board(
             self, player_position=None, terminal_states=(), some_matrix=None, policy=None, goals=None,
             walls={}, boxes={}, hungry=False, thirsty=False, state_offset=None,
-            highlight_square=None, info=False, water_position=None, food_position=False, just_numbers=True,
+            highlight_square=None, info=False, water_position=None, food_position=None, just_numbers=True,
             action_names=(), highlight_squares=(),
     ):
         COLOR_BLUE = (0, 0, 255)

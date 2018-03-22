@@ -1,4 +1,5 @@
 import numpy as np
+import tqdm
 import collections
 import matplotlib.pyplot as plt
 import cma
@@ -23,7 +24,7 @@ class CMAES(object):
         )
         self.fitness_function = fitness_function
 
-    def optimize(self):
+    def optimize(self, n_iterations):
         f_h = []
         fbest_h = []
         sigma_h = []
@@ -36,8 +37,7 @@ class CMAES(object):
         time_budget = self.default_args[-2]
 
         import bruteforce_options
-        scores = bruteforce_options.bruteforce_options()
-        no_options = scores[(None, None, None, None)][int(time_budget / 10)]
+        no_options_score = bruteforce_options.get_no_option_score(time_budget)
 
         f_h_deque = collections.deque(maxlen=5)
         import glob
@@ -47,7 +47,7 @@ class CMAES(object):
             experiment_id = 0
 
         pool = multiprocessing.Pool(processes=self.population_size)
-        while True:
+        for optimization_iteration in tqdm.tqdm(range(n_iterations), desc="otimization"):
             solutions_ = self.solver.ask()
             solutions_clip = np.clip(solutions_, -0.6, 0.6)
             solutions = self.scalar_to_coords(SIDE_SIZE, solutions_clip)
@@ -55,8 +55,8 @@ class CMAES(object):
 
             # async is not needded since **cache is up**, but cache is so slow (gzip?)
             # TODO: with pool as pool
-            fitness_list = pool.map(self.fitness_function, args)
-            # fitness_list = list(map(self.fitness_function, args))
+            # fitness_list = pool.map(self.fitness_function, args)
+            fitness_list = list(map(self.fitness_function, args))
 
             results = [-f for f in fitness_list]
             self.solver.tell(solutions_, results)
@@ -104,7 +104,7 @@ class CMAES(object):
             fitness_ax.plot(f_h)
             # TODO: plot bruteforce optimal
             # TODO: why is no_options not showing? overlap?
-            fitness_ax.plot(no_options)
+            fitness_ax.plot(no_options_score)
             fitness_ax.set_title("fitness")
 
             # sigma_ax.ylim(0, 100)
@@ -118,7 +118,7 @@ class CMAES(object):
             fig.savefig("fitness_history{}.png".format(experiment_id))
             # fig.canvas.draw()
         pool.close()
-        return history
+        return self.solver.result.xbest, f_h
 
     def scalar_to_coords(self, SIDE_SIZE, solutions_):
         solutions = [np.clip(SIDE_SIZE * (s + 0.5), 0, SIDE_SIZE - 1).reshape(-1, 2).astype(np.int) for s in solutions_]

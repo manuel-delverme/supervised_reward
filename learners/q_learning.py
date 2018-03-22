@@ -160,7 +160,8 @@ class QLearning(object):
             old_state = new_state
 
             if step in xs:
-                fitnesses.append(fitness)
+                test_fitness = self.test(step)
+                fitnesses.append(test_fitness)
         fitnesses.append(fitness)
 
         # save state

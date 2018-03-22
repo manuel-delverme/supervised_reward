@@ -280,8 +280,24 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
     def eval_option_on_mdp(cls, SIDE_SIZE, box_positions, option_vec, xs):
         # print("CACHE MISS! shouldn't happen")
         # import ipdb; ipdb.set_trace()
-        assert False
         mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions)
         learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
         _, _, fitnesses = learner.learn(xs=xs)
         return fitnesses
+
+    @classmethod
+    @disk_utils.disk_cache
+    def eval_option_distribution_on_mdp(cls, SIDE_SIZE, box_positions, option_vec, xs, nr_samples=1):
+        if nr_samples == 1:
+            raise Exception("cache miss! should not happen")
+            return cls.eval_option_on_mdp(SIDE_SIZE, box_positions, option_vec, xs)
+        mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions)
+        samples = []
+        for _ in range(nr_samples):
+            learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
+            _, _, fitnesses = learner.learn(xs=xs)
+            samples.append(fitnesses)
+        sigma = np.var(samples, axis=0)
+        mu = np.mean(samples, axis=0)
+        return mu, sigma
+

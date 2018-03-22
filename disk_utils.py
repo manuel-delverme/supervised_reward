@@ -29,7 +29,11 @@ def disk_cache(function):
         cache_file += ".pkl.gz"
 
         try:
-            with gzip.open(cache_file, "rb") as fin:
+            if function.__name__ == "gather_stats":
+                storage_fn = open
+            else:
+                storage_fn = gzip.open
+            with storage_fn(cache_file, "rb") as fin:
                 retr = pickle.load(fin)
         except FileNotFoundError:
             retr = function(*args, **kwargs)
