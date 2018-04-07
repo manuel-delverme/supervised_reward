@@ -56,8 +56,8 @@ def plot_option_scores():
     top_scorers = {}
     worst_scorers = {}
     score_history = {}
-    for option_ids, option_scores in list(scores.items()):
-    	scores[option_ids] = np.log(1 + option_scores)
+    # for option_ids, option_scores in list(scores.items()):
+    # 	scores[option_ids] = np.log(1 + option_scores)
     for option_ids, option_scores in scores.items():
         for score_idx, nr_iter in enumerate(xs):
             option_score = option_scores[score_idx]

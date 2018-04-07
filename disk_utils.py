@@ -14,6 +14,8 @@ def disk_cache(function):
         if args:
             args_filtered = []
             for arg in args:
+                if isinstance(arg, dict):
+                    arg = list(arg.keys())[:100]
                 arg = str(arg)
                 if len(arg) > 100:
                     arg = hashlib.sha1(arg.encode('utf-8')).hexdigest()
@@ -29,7 +31,7 @@ def disk_cache(function):
         cache_file += ".pkl.gz"
 
         try:
-            if function.__name__ == "gather_stats":
+            if function.__name__ in ("gather_stats", "get_score_history"):
                 storage_fn = open
             else:
                 storage_fn = gzip.open
@@ -47,5 +49,4 @@ def disk_cache(function):
             with storage_fn(cache_file, "wb") as fout:
                 pickle.dump(retr, fout)
         return retr
-
     return wrapper

@@ -1,4 +1,5 @@
 import collections
+import seaborn as sns
 import itertools
 import random
 import matplotlib.pyplot as plt
@@ -58,109 +59,136 @@ def bruteforce_options():
 
 
 def plot_option_scores():
-    xs = [10 + 10 * x for x in range(1000)]
+    xs_full = [10 + 10 * x for x in range(1000)]
+    xs = list(range(10, 510, 10))
+    xs = list(range(500, 1050, 10))
+    percentiles_ranges = [1, 50, 90, 95, 99, 99.9, 100]
 
+    print("bruteforce_options")
     scores = bruteforce_options()
-    top_scorers = {}
-    worst_scorers = {}
-    score_history = {}
-    for option_ids, option_scores in scores.items():
-        for score_idx, nr_iter in enumerate(xs):
-            option_score = option_scores[score_idx]
-            top_scorers[nr_iter] = (option_ids, option_score)
-            worst_scorers[nr_iter] = (option_ids, option_score)
-            score_history[nr_iter] = []
-        break
-    for option_ids, option_scores in tqdm.tqdm(scores.items()):
-        for score_idx, nr_iter in enumerate(xs):
-            option_score = option_scores[score_idx]
-            if top_scorers[nr_iter][1] < option_score:
-                top_scorers[nr_iter] = (option_ids, option_score)
-            if worst_scorers[nr_iter][1] > option_score:
-                worst_scorers[nr_iter] = (option_ids, option_score)
-            score_history[nr_iter].append(option_score)
+    print("get_score_history")
+    score_history = get_score_history(scores, xs_full, xs)
+    print("top_worst_scores")
+    # top_scorers, worst_scorers = top_worst_scorers(scores, xs)
     no_options = scores[(None, None, None, None)]
 
-    xs = [10, 20, 30, 60, 120, 250, 500, 1000, 2000, 4000, 8000, xs[-1]]
-    import seaborn as sns
-    sns.set(color_codes=True)
-    data = []
-    # xs = sorted(score_history.keys())
-    for x in xs:
-        data.append(score_history[x])
-
-    plt.figure(1)
-    y_low, y_high = worst_scorers[xs[0]][1], top_scorers[xs[-1]][1]
-    y_high = 1000
-    plt.ylim(ymin=y_low, ymax=y_high)
-    # plt.subplot(
-    data = np.array(data)
-
-    percentiles_ranges = [1, 50, 90, 95, 99, 99.9, 100]
     percentiles = [{} for nr_iter in percentiles_ranges]
+    # x_labels = [str(idx) + "_" + str(x) + "_iter" for idx, x in enumerate(xs)]
+    # data = []
+    # for x in xs:
+    #     data.append(score_history[x])
+    # data = np.array(data)
+
+    # sns.set(color_codes=True)
+    fig = plt.figure(1)
+    # plt.ylim(
+    #     ymin=worst_scorers[xs[0]][1],
+    #     ymax=top_scorers[xs[-1]][1],
+    # )
+
     for nr_iter in tqdm.tqdm(xs, desc="percentiels"):
+        z = np.percentile(score_history[nr_iter], percentiles_ranges)
         for idx, perc in enumerate(percentiles_ranges):
-            percentiles[idx][nr_iter] = np.percentile(score_history[nr_iter], perc)
+            percentiles[idx][nr_iter] = z[idx]
 
-    x_labels = [str(idx) + "_" + str(x) + "_iter" for idx, x in enumerate(xs)]
-    # plt.plot(x_labels, data)
-    plt.plot(x_labels, data.mean(axis=1), 'o', label="mean")
+    # for idx, perc in tqdm.tqdm(enumerate(percentiles_ranges), desc="plot percs"):
+    #     ys = [percentiles[idx][x] for x in xs]
+    #     plt.plot(x_labels, ys, 'o', label="perc:" + str(perc))
+    # plt.legend(loc='upper right')
 
-    # print(percentiles)
-    for idx, perc in tqdm.tqdm(enumerate(percentiles_ranges), desc="plot percs"):
-        ys = [percentiles[idx][x] for x in xs]
-        plt.plot(x_labels, ys, 'o', label="perc:" + str(perc))
-    plt.legend(loc='upper right')
-    plt.savefig("percentiles.png")
+    # no_options_show = []
+    # for idx, x in enumerate(xs_full):
+    #     if x in xs:
+    #         no_options_show.append(no_options[idx])
 
-    plt.title("perc vs score")
-    x_labels = [str(idx) + "_" + str(x) + "%" for idx, x in enumerate(percentiles_ranges)]
-    for nr_iter in tqdm.tqdm(percentiles[0].keys(), desc="perc vs score"):
-        ys = [percentiles[percentiles_ranges.index(perc)][nr_iter] for perc in percentiles_ranges]
-        plt.plot(x_labels, ys, 'o', label="iter:" + str(nr_iter))
+    # plot_p_noopt_better_opts(no_options, score_history)
+    # fig.clear()
+    # plot_distribution_vs_no_options(no_options, score_history, xs)
+    # fig.clear()
+    # plot_best_option_distribution(percentiles, percentiles_ranges, scores, xs, xs_full)
+
+    # plot_percentiles_vs_no_options(no_options_show, score_history, xs)
+    import ipdb; ipdb.set_trace()
+    plot_percentiles_vs_no_options(percentiles, percentiles_ranges, no_options, xs_full, xs)
+    # plot_percentiles_vs_no_options(percentiles, percentiles_ranges, no_options_show, xs)
+    fig.clear()
+
+
+def plot_distribution_vs_no_options(no_options, score_history, xs):
+    X, Y = [], []
+    for nr_iter in tqdm.tqdm(score_history, desc="plot distribution"):
+        for s in score_history[nr_iter]:
+            X.append(nr_iter)
+            Y.append(s)
+    print("plotting")
+    domain = int(max(X) / 10) + 1
+    plt.plot(range(0, 501, 10), no_options[:domain], label="no options")
+    plt.scatter(X, Y, label="distr", alpha=0.05, s=0.5, antialiased=False)
     plt.legend(loc='upper left')
-    plt.savefig("perc_vs_score.png")
+    plt.title("percentiles and no options")
+    plt.savefig("distr_and_no_options{}.png".format(str(xs[0]) + str(xs[-1])))
+    print("plotted")
 
-    x_labels = [str(idx) + "_" + str(x) + "_iter" for idx, x in enumerate(xs)]
 
-    ys = [percentiles[percentiles_ranges.index(100)][nr_iter] for nr_iter in xs]
-    plt.plot(x_labels, ys, 'o', label="best")
-    plt.savefig("best.png")
+def plot_p_noopt_better_opts(no_options, score_history):
+    p_above = []
+    for nr_iter in tqdm.tqdm(sorted(score_history.keys()), desc="plot distribution"):
+        above_no_opt = 0
+        below_no_opt = 0
+        no_opt_score = no_options[nr_iter // 10]
+        for option_set_score in score_history[nr_iter]:
+            if option_set_score < no_opt_score:
+                below_no_opt += 1
+            else:
+                above_no_opt += 1
+        optset_total = (below_no_opt + above_no_opt)
+        above_no_opt /= optset_total
+        below_no_opt /= optset_total
+        p_above.append(1 + above_no_opt)
+    p_above = p_above[10:]
+    plt.ylim(np.log(min(p_above)), np.log(max(p_above)))
+    plt.plot(np.log(p_above))
+    plt.savefig("p_above.png")
+    print(p_above)
 
-    no_options_show = []
-    xs_full = [10 + 10 * x for x in range(1000)]
+
+def plot_percentiles_vs_no_options(percentiles, percentiles_ranges, no_options, xs_full, xs):
+    visible_no_options = []
+    # xs_full = [10 + 10 * x for x in range(1000)]
     for idx, x in enumerate(xs_full):
         if x in xs:
-            no_options_show.append(no_options[idx])
-    plt.plot(x_labels, no_options_show, label="no options")
-    plt.savefig("no options.png")
+            visible_no_options.append(no_options[idx])
 
-    # ys = [percentiles[percentiles_ranges.index(1)][nr_iter] for nr_iter in xs]
-    # plt.plot(x_labels, ys, label="perc:1%")
+    for percentile_idx, perc in tqdm.tqdm(enumerate(percentiles_ranges), desc="plot percs"):
+        ys = []
+        for iter_budget in xs_full:
+            if iter_budget in xs:
+                ys.append(percentiles[percentile_idx][iter_budget])
+                print("using", percentile_idx, iter_budget, score)
+            else:
+                try:
+                    score = percentiles[percentile_idx][iter_budget]
+                except:
+                    score = "WOOPS"
+                print("skipping", percentile_idx, iter_budget, score)
+        # plt.plot(x_labels, ys, '-', label="perc:" + str(perc))
+        plt.plot(xs, ys, label="percentile:" + str(perc), alpha=0.7)
+    plt.legend(loc='upper right')
+    plt.title("percentiles")
+    # plt.savefig("percentiles{}.png".format("_".join(str(r) for r in percentiles_ranges)))
+    plt.set_cmap("jet")
+    plt.plot(xs, visible_no_options, label="no options", color="red")
+    plt.legend(loc='upper left')
+    plt.title("percentiles and no options")
+    plt.savefig("percentiles_and_no_options{}.png".format("_".join(str(r) for r in percentiles_ranges)))
+    return percentiles, percentiles_ranges
 
-    # ys = [percentiles[percentiles_ranges.index(90)][nr_iter] for nr_iter in xs]
-    # plt.plot(x_labels, ys, label="perc:90%")
 
-    ys = [percentiles[percentiles_ranges.index(50)][nr_iter] for nr_iter in xs]
-    plt.plot(x_labels, ys, label="perc:50%")
-    plt.savefig("perc:50%.png")
-
-    # ys = [percentiles[percentiles_ranges.index(95)][nr_iter] for nr_iter in xs]
-    # plt.plot(x_labels, ys, label="perc:95%")
-
-    ys = [percentiles[percentiles_ranges.index(99)][nr_iter] for nr_iter in xs]
-    plt.plot(x_labels, ys, label="perc:99%")
-    plt.savefig("perc:99%.png")
-
-    # plt.legend(loc='upper left')
-    # plt.show()
-
+def plot_best_option_distribution(percentiles, percentiles_ranges, scores, xs, xs_full):
     cutoff = {nr_iter: percentiles[percentiles_ranges.index(99.9)][nr_iter] for nr_iter in xs}
     best_sets = {}
-
     for nr_iter in xs:
         best_sets[nr_iter] = []
-
     print("best sets")
     for option_ids, option_scores in tqdm.tqdm(scores.items(), desc="best sets"):
         for iter_idx, option_score in enumerate(option_scores):
@@ -168,26 +196,43 @@ def plot_option_scores():
             if nr_iter in xs:
                 if option_score > cutoff[nr_iter]:
                     best_sets[nr_iter].append((option_ids, option_score))
-
     for nr_iter in best_sets.copy().keys():
         best_sets[nr_iter].sort(key=lambda _x: -_x[1])
-
-    # import pprint
-    # pprint.pprint(best_sets)
     import pickle
-    with open("best_sets.txt", "wb") as fout:
-        pickle.dump(pprint.pformat(best_sets), fout)
+    with open("best_sets.pkl", "wb") as fout:
+        pickle.dump(best_sets, fout)
 
-    # mdp = envs.boxes.BoxWorld(side_size=6, box_positions=())
-    # mdp.show_board(just_numbers=True)
-    # input("enjoy")
 
-    # df = pd.DataFrame(data, index=xs)
-    # df.groupby(axis=1)
+# @disk_utils.disk_cache
+def get_score_history(scores, xs_full, xs):
+    score_history = {}
+    for score_idx, nr_iter in enumerate(xs):
+        score_history[nr_iter] = []
+    for option_ids, option_scores in tqdm.tqdm(scores.items(), desc="score history"):
+        for score_idx, nr_iter in enumerate(xs_full):
+            if nr_iter in xs:
+                option_score = option_scores[score_idx]
+                score_history[nr_iter].append(option_score)
+    return score_history
 
-    # df.describe()
-    # ax = sns.tsplot(data=data, ci=[50, 90], color="m")
-    # return df
+
+@disk_utils.disk_cache
+def top_worst_scorers(scores, xs):
+    top_scorers = {}
+    worst_scorers = {}
+    for option_ids, option_scores in scores.items():
+        for score_idx, nr_iter in enumerate(xs):
+            option_score = option_scores[score_idx]
+            top_scorers[nr_iter] = (option_ids, option_score)
+            worst_scorers[nr_iter] = (option_ids, option_score)
+    for option_ids, option_scores in tqdm.tqdm(scores.items()):
+        for score_idx, nr_iter in enumerate(xs):
+            option_score = option_scores[score_idx]
+            if top_scorers[nr_iter][1] < option_score:
+                top_scorers[nr_iter] = (option_ids, option_score)
+            if worst_scorers[nr_iter][1] > option_score:
+                worst_scorers[nr_iter] = (option_ids, option_score)
+    return top_scorers, worst_scorers
 
 
 if __name__ == "__main__":

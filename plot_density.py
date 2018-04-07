@@ -1,131 +1,54 @@
 import pickle
+import tqdm
 import collections
 import matplotlib.pyplot as plt
 import numpy as np
-from mpl_toolkits.mplot3d import Axes3D
-
-def fml(s): return s.replace("(", "").replace(")","").replace(",","").replace("]", "").replace("[", "")
-data = """
- 60: [((4, 6, 39, 48), 4.0),
-      ((None, 0, 6, 48), 3.8333333333333335),
-      ((4, 6, 20, 46), 3.8333333333333335),
-      ((6, 13, 41, 48), 3.8333333333333335),
-      ((0, 6, 39, 47), 3.6666666666666665),
-      ((4, 6, 27, 29), 3.6666666666666665),
-      ((6, 13, 15, 41), 3.6666666666666665),
-      ((0, 6, 8, 48), 3.6666666666666665),
-      ((0, 4, 20, 47), 3.6666666666666665),
-      ((6, 7, 18, 48), 3.5),
-      ((6, 13, 27, 41), 3.5),
-      ((13, 35, 41, 48), 3.5),
-      ((None, 7, 27, 42), 3.5),
-      ((0, 4, 12, 39), 3.5),
-      ((None, 1, 6, 48), 3.5),
-      ((15, 39, 41, 43), 3.5),
-      ((6, 37, 47, 48), 3.5),
-      ((None, None, 35, 41), 3.3333333333333335),
-      ((19, 40, 42, 48), 3.3333333333333335),
-      ((4, 13, 40, 48), 3.3333333333333335),
-      ((0, 6, 18, 20), 3.3333333333333335),
-      ((7, 9, 38, 39), 3.3333333333333335),
-      ((4, 6, 38, 47), 3.3333333333333335),
-      ((4, 7, 38, 46), 3.3333333333333335),
-      ((6, 42, 46, 47), 3.3333333333333335),
-      ((0, 6, 29, 39), 3.3333333333333335),
-      ((3, 6, 11, 48), 3.3333333333333335),
-      ((6, 38, 42, 44), 3.3333333333333335),
-      ((6, 7, 18, 41), 3.3333333333333335),
-      ((4, 6, 29, 48), 3.3333333333333335),
-      ((7, 13, 15, 18), 3.3333333333333335),
-      ((0, 32, 37, 39), 3.3333333333333335),
-      ((6, 7, 44, 47), 3.3333333333333335),
-      ((None, 4, 5, 46), 3.3333333333333335),
-      ((2, 7, 13, 39), 3.3333333333333335),
-      ((6, 27, 29, 35), 3.3333333333333335),
-      ((0, 15, 29, 39), 3.3333333333333335),
-      ((0, 6, 16, 35), 3.3333333333333335),
-      ((0, 34, 39, 48), 3.3333333333333335),
-      ((0, 5, 11, 48), 3.1666666666666665),
-      ((5, 6, 13, 48), 3.1666666666666665),
-      ((6, 33, 47, 48), 3.1666666666666665),
-      ((4, 30, 37, 44), 3.1666666666666665),
-      ((0, 15, 41, 48), 3.1666666666666665),
-      ((6, 33, 41, 46), 3.1666666666666665),
-      ((0, 11, 36, 39), 3.1666666666666665),
-      ((0, 15, 16, 40), 3.1666666666666665),
-      ((0, 6, 9, 38), 3.1666666666666665),
-      ((0, 39, 41, 47), 3.1666666666666665),
-      ((None, 40, 47, 48), 3.1666666666666665),
-      ((1, 6, 7, 13), 3.1666666666666665),
-      ((0, 5, 6, 27), 3.1666666666666665),
-      ((0, 3, 27, 48), 3.1666666666666665),
-      ((34, 35, 36, 48), 3.1666666666666665),
-      ((None, 20, 41, 48), 3.1666666666666665),
-      ((None, 6, 13, 48), 3.1666666666666665),
-      ((0, 1, 13, 47), 3.1666666666666665),
-      ((None, 37, 39, 48), 3.1666666666666665),
-      ((None, 0, 12, 48), 3.1666666666666665),
-      ((0, 9, 35, 44), 3.1666666666666665),
-      ((None, 0, 8, 13), 3.1666666666666665),
-      ((15, 41, 42, 48), 3.1666666666666665),
-      ((6, 32, 34, 48), 3.1666666666666665),
-      ((None, 0, 40, 48), 3.1666666666666665),
-      ((None, 0, 39, 47), 3.1666666666666665),
-      ((0, 6, 18, 19), 3.1666666666666665),
-      ((4, 6, 20, 41), 3.1666666666666665),
-      ((6, 36, 46, 48), 3.1666666666666665),
-      ((4, 6, 43, 48), 3.1666666666666665),
-      ((0, 6, 13, 15), 3.1666666666666665),
-      ((0, 36, 42, 47), 3.1666666666666665),
-      ((0, 7, 27, 39), 3.1666666666666665),
-      ((5, 12, 42, 48), 3.1666666666666665),
-      ((4, 6, 19, 46), 3.1666666666666665),
-      ((0, 34, 38, 48), 3.1666666666666665),
-      ((4, 6, 18, 48), 3.1666666666666665),
-      ((0, 5, 36, 43), 3.1666666666666665),
-      ((6, 11, 34, 41), 3.1666666666666665)],
-"""
-dt = data.split()
-pos = collections.defaultdict(int)
-del dt[0]
-for i in range(390):
-    row = dt[(i)*5:(i+1)*5]
-    if row == []:
-        break
-    o1, o2, o3, o4, score = row
-    if float(fml(score)) < 3.2:
-        continue
-    for p in (o1, o2, o3):
-        pos[fml(p)] += 1
-d = np.zeros(shape=(7,7))
-d = d.flatten()
-for p in pos:
-    if p != 'None':
-        d[int(p)] = pos[p]
-
-
 
 fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
+ax = fig.add_subplot(111)
 
-X,Y = np.meshgrid(range(7), range(7))
-Z = np.empty((7, 7))
-for idx in range(49):
-    x = idx % 7
-    y = idx // 7
-    Z[x][y] = pos[str(idx)]
-Z = np.rot90(Z)
-print(X)
-print(Y)
-print(Z)
+with open("best_sets.pkl", "rb") as fin:
+    best_sets = pickle.load(fin)
 
+vmax = 0
+for iter_budget, option_sets in tqdm.tqdm(best_sets.items()):
+    X, Y = np.meshgrid(range(7), range(7))
+    Z = np.zeros((7, 7))
+    total = 0
+    # for idx in range(49):
+    for option_set in option_sets:
+        goal_idxs, score = option_set
+        for goal_idx in goal_idxs:
+            if goal_idx is not None:
+                x = goal_idx % 7
+                y = goal_idx // 7
+                Z[x][y] += 1
+                total += 1
+    vmax = max(vmax, (Z / total).max())
 
-# ax = plt.axes(projection='3d')
-# plt.contourf(X, Y, Z, 20, cmap='RdGy')
-# ax.contour3D(X, Y, Z, 50, cmap='binary')
-surf = ax.plot_wireframe(X, Y, Z, linewidth=0, antialiased=False)
-ax = plt.axes(projection='3d')
-ax.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap='viridis', edgecolor='none')
-ax.set_title('surface');
-# plt.matshow(Z)
-plt.show()
+for iter_budget, option_sets in tqdm.tqdm(best_sets.items()):
+    X, Y = np.meshgrid(range(7), range(7))
+    Z = np.zeros((7, 7))
+    total = 0
+    # for idx in range(49):
+    for option_set in option_sets:
+        goal_idxs, score = option_set
+        for goal_idx in goal_idxs:
+            if goal_idx is not None:
+                x = goal_idx % 7
+                y = goal_idx // 7
+                Z[x][y] += 1
+                total += 1
+    Z = np.rot90(Z / total)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(Z, interpolation='nearest', vmax=vmax, vmin=0, cmap='jet')
+    fig.colorbar(cax)
+    ax.set_title('Goal distribution for budget: {} iterations'.format(iter_budget))
+
+    # Add colorbar, make sure to specify tick locations to match desired ticklabels
+    # cbar = fig.colorbar(cax, ticks=[-1, 0, 1])
+    plt.savefig("plots/best_sets{}.png".format(iter_budget))
+    fig.clear()
+# plt.show()
