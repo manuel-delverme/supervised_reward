@@ -1,11 +1,10 @@
 import itertools
 import numpy as np
-import matplotlib.pyplot as plt
 import controller.meta_controller
 import controller.meta_controller
 import envs.simple_boxes
 import learners
-import options_utils
+from utils import options_utils
 import functools
 import bruteforce_options
 

@@ -1,5 +1,5 @@
 import enum
-import disk_utils
+from utils import disk_utils
 import collections
 import numpy as np
 import itertools
@@ -9,7 +9,6 @@ import learners
 import random
 import gym.spaces
 import learners.q_learning
-import matplotlib.pyplot as plt
 
 
 class BoxWorldActions(enum.Enum):
@@ -25,7 +24,7 @@ class _BoxState(enum.Enum):
 
 
 class BoxWorldSimple(envs.gridworld.GridWorld):
-    def __init__(self, side_size, box_positions=(), agent_lifetime=5):
+    def __init__(self, side_size, box_positions=(), agent_lifetime=5, composite_actions=False):
         super(BoxWorldSimple, self).__init__(side_size, terminal_states=(), base_transition_probability=0.9,)
         self._lifetime = agent_lifetime
         self.time_left = agent_lifetime
@@ -33,16 +32,28 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         self.box2_is_full = None
         self.box_positions = box_positions
 
+        self.composite_actions = composite_actions
+        self.action_history = collections.deque(maxlen=2)
+        self.action_history.extend([3, 3])  # history always starts form the same state, 3s are odd made up numbers
+
         self.reset()
 
-        extra_dof = (len(_BoxState) ** 2)
-        self.observation_space = gym.spaces.Discrete(self.observation_space.n * extra_dof)
         self.action_space = gym.spaces.Discrete(len(BoxWorldActions))
+
+        extra_dof = (len(_BoxState) ** 2)
+        if composite_actions:
+            extra_dof *= (len(self.action_history) ** self.action_space.n)
+        self.observation_space = gym.spaces.Discrete(self.observation_space.n * extra_dof)
 
     def _step(self, action):
         assert self.time_left >= 0
 
-        tile_idx, gridworld_reward, gridworld_terminal, info = super(envs.gridworld.GridWorld, self)._step(action)
+        if self.action_history == action:
+            tile_idx, gridworld_reward, gridworld_terminal, info = super(envs.gridworld.GridWorld, self)._step(action)
+        else:
+            info = {}
+
+        self.action_history.append(action)
 
         reward = -1
         if len(self.box_positions) > 0:
@@ -80,8 +91,13 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         offset *= 2
 
         state_hash += self.box2_is_full * offset
-        # offset *= 2
+        offset *= 2
 
+        if self.composite_actions:
+            state_hash += self.action_history[0] * offset
+            offset *= self.action_space.n
+            state_hash += self.action_history[1] * offset
+            offset *= self.action_space.n
         return state_hash
 
     def reset(self):
@@ -124,19 +140,16 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         )
 
     def __repr__(self):
-        return "<BoxWorld {} instance>".format(self.number_of_tiles)
+        if self.composite_actions:
+            return "<harderBoxWorld {} instance>".format(self.number_of_tiles)
+        else:
+            return "<BoxWorld {} instance>".format(self.number_of_tiles)
 
     def __str__(self):
-        # TODO: dirrrty
-        return "<BoxWorld {} instance>".format(self.number_of_tiles)
+        return self.__repr__()
 
     @staticmethod
     def get_fitness_fn(SIDE_SIZE):
-        TRAINING_NO_CHANGE_STOP = 1000
-        GENERATE_RANDOM_OPTIONS = False
-        TRAINING_MAX_STEPS = 10000
-
-        TEST_MAX_STEPS_TRAIN = 2000
         TEST_MAX_STEPS_EVAL = 1000
         OPTION_LEARNING_STEPS = 10000
 
@@ -278,8 +291,16 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
     @classmethod
     @disk_utils.disk_cache
     def eval_option_on_mdp(cls, SIDE_SIZE, box_positions, option_vec, xs):
-        # print("CACHE MISS! shouldn't happen")
-        # import ipdb; ipdb.set_trace()
+        print("CACHE MISS! shouldn't happen")
+        import ipdb; ipdb.set_trace()
+        mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions)
+        learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
+        _, _, fitnesses = learner.learn(xs=xs)
+        return fitnesses
+
+    @classmethod
+    @disk_utils.disk_cache
+    def eval_option_on_complex_mdp(cls, SIDE_SIZE, box_positions, option_vec, xs):
         mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions)
         learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
         _, _, fitnesses = learner.learn(xs=xs)

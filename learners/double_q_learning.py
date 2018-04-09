@@ -1,15 +1,10 @@
 import numpy as np
 import envs.gridworld
-import collections
-import tqdm
-import learners.policy_iter
-import sys
 import time
-import disk_utils
+from utils import disk_utils
 # import envs.boxes
 import envs.hungry_thirsty
 import random
-import sys
 
 TERMINATE_OPTION = -1
 

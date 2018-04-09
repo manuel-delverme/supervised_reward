@@ -1,9 +1,6 @@
-import numpy as np
 import collections
 import sys
 import time
-import disk_utils
-import random
 import math
 import numpy as np
 import random

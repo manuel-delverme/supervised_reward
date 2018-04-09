@@ -7,7 +7,7 @@ import itertools
 import numpy as np
 import controller.meta_controller
 import envs.simple_boxes as e
-import options_utils
+from utils import options_utils
 
 
 def gather_sensor_readings(world_tiles, world_walls, world_width):

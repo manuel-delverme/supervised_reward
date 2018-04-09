@@ -7,8 +7,17 @@ import learners.q_learning
 def gather_option_stats(SIDE_SIZE, options, possible_box_positions, xs, nr_samples):
     cum_cum_reward = np.zeros(shape=(len(xs), 2))
     for eval_step, box_positions in enumerate(possible_box_positions):
-        mean, variance = e.BoxWorldSimple.eval_option_distribution_on_mdp(SIDE_SIZE, box_positions, options, xs, nr_samples)
+        mean, variance = e.BoxWorldSimple.eval_option_distribution_on_mdp(SIDE_SIZE, box_positions, options, xs,
+                                                                          nr_samples)
         cum_cum_reward += np.vstack((mean, variance)).T
+    return cum_cum_reward / (eval_step + 1)
+
+
+def eval_options_on_complex_mdp(SIDE_SIZE, options, possible_box_positions, xs):
+    cum_cum_reward = np.zeros(len(xs))
+    for eval_step, box_positions in enumerate(possible_box_positions):
+        option_set_scores = e.BoxWorldSimple.eval_option_on_complex_mdp(SIDE_SIZE, box_positions, options, xs)
+        cum_cum_reward += np.array(option_set_scores)
     return cum_cum_reward / (eval_step + 1)
 
 

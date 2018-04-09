@@ -1,17 +1,14 @@
-import collections
-import seaborn as sns
 import itertools
 import random
 import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
-import disk_utils
+from utils import disk_utils, options_utils
 import envs.gridworld
 import envs.hungry_thirsty
 import envs.simple_boxes
 import learners.double_q_learning
 import learners.q_learning
-import options_utils
 import argparse
 
 
@@ -58,60 +55,63 @@ def bruteforce_options():
     return option_sets_scores
 
 
+@disk_utils.disk_cache
+def bruteforce_options_complex_world():
+    NUMBER_OF_OPTIONS = 4
+    SIDE_SIZE = 7
+    token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=SIDE_SIZE, composite_actions=True)
+
+    possible_tiles = [position_idx for position_idx in range(token_mdp.number_of_tiles) if
+                      position_idx not in token_mdp._walls]
+    option_sets = itertools.combinations([None] * NUMBER_OF_OPTIONS + possible_tiles, NUMBER_OF_OPTIONS)
+    option_sets = list(option_sets)
+    random.shuffle(option_sets)
+
+    xs = [10 + 10 * x for x in range(500)]
+    possible_box_positions = list(itertools.combinations(
+        [
+            0,
+            SIDE_SIZE - 1,
+            (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
+            SIDE_SIZE * SIDE_SIZE - 1,
+        ], 2))
+    learner = learners.q_learning.QLearning(env=token_mdp, options=[])
+
+    option_map = {tuple(): tuple()}
+    for goal_idx in range(token_mdp.number_of_tiles):
+        option_map[goal_idx] = options_utils.goal_to_policy(learner, goal_idx, token_mdp)
+
+    option_sets_scores = {}
+    for option_set in tqdm.tqdm(option_sets):
+        options = [option_map[goal_idx] for goal_idx in option_set if goal_idx is not None]
+        option_sets_scores[option_set] = options_utils.eval_options_on_complex_mdp(
+            SIDE_SIZE, options, possible_box_positions, xs
+        )
+    return option_sets_scores
+
+
 def plot_option_scores():
     xs_full = [10 + 10 * x for x in range(1000)]
-    xs = list(range(10, 510, 10))
-    xs = list(range(500, 1050, 10))
-    percentiles_ranges = [1, 50, 90, 95, 99, 99.9, 100]
-
     print("bruteforce_options")
-    scores = bruteforce_options()
-    print("get_score_history")
-    score_history = get_score_history(scores, xs_full, xs)
+    # scores = bruteforce_options()
+    scores = bruteforce_options_complex_world()
     print("top_worst_scores")
-    # top_scorers, worst_scorers = top_worst_scorers(scores, xs)
     no_options = scores[(None, None, None, None)]
-
-    percentiles = [{} for nr_iter in percentiles_ranges]
-    # x_labels = [str(idx) + "_" + str(x) + "_iter" for idx, x in enumerate(xs)]
-    # data = []
-    # for x in xs:
-    #     data.append(score_history[x])
-    # data = np.array(data)
-
-    # sns.set(color_codes=True)
+    percentiles_ranges = [1, 50, 90, 95, 99, 99.9, 100]
     fig = plt.figure(1)
-    # plt.ylim(
-    #     ymin=worst_scorers[xs[0]][1],
-    #     ymax=top_scorers[xs[-1]][1],
-    # )
 
-    for nr_iter in tqdm.tqdm(xs, desc="percentiels"):
-        z = np.percentile(score_history[nr_iter], percentiles_ranges)
-        for idx, perc in enumerate(percentiles_ranges):
-            percentiles[idx][nr_iter] = z[idx]
+    for xs in (list(range(10, 510, 10)), list(range(500, 1010, 10)), list(range(1000, 5010, 10))):
+        print("get_score_history")
+        score_history = get_score_history(scores, xs_full, xs)
 
-    # for idx, perc in tqdm.tqdm(enumerate(percentiles_ranges), desc="plot percs"):
-    #     ys = [percentiles[idx][x] for x in xs]
-    #     plt.plot(x_labels, ys, 'o', label="perc:" + str(perc))
-    # plt.legend(loc='upper right')
+        percentiles = [{} for nr_iter in percentiles_ranges]
+        for nr_iter in tqdm.tqdm(xs, desc="percentiels"):
+            z = np.percentile(score_history[nr_iter], percentiles_ranges)
+            for idx, perc in enumerate(percentiles_ranges):
+                percentiles[idx][nr_iter] = z[idx]
 
-    # no_options_show = []
-    # for idx, x in enumerate(xs_full):
-    #     if x in xs:
-    #         no_options_show.append(no_options[idx])
-
-    # plot_p_noopt_better_opts(no_options, score_history)
-    # fig.clear()
-    # plot_distribution_vs_no_options(no_options, score_history, xs)
-    # fig.clear()
-    # plot_best_option_distribution(percentiles, percentiles_ranges, scores, xs, xs_full)
-
-    # plot_percentiles_vs_no_options(no_options_show, score_history, xs)
-    import ipdb; ipdb.set_trace()
-    plot_percentiles_vs_no_options(percentiles, percentiles_ranges, no_options, xs_full, xs)
-    # plot_percentiles_vs_no_options(percentiles, percentiles_ranges, no_options_show, xs)
-    fig.clear()
+        plot_percentiles_vs_no_options(percentiles, percentiles_ranges, no_options, xs_full, xs)
+        fig.clear()
 
 
 def plot_distribution_vs_no_options(no_options, score_history, xs):
@@ -164,15 +164,9 @@ def plot_percentiles_vs_no_options(percentiles, percentiles_ranges, no_options, 
         for iter_budget in xs_full:
             if iter_budget in xs:
                 ys.append(percentiles[percentile_idx][iter_budget])
-                print("using", percentile_idx, iter_budget, score)
-            else:
-                try:
-                    score = percentiles[percentile_idx][iter_budget]
-                except:
-                    score = "WOOPS"
-                print("skipping", percentile_idx, iter_budget, score)
         # plt.plot(x_labels, ys, '-', label="perc:" + str(perc))
         plt.plot(xs, ys, label="percentile:" + str(perc), alpha=0.7)
+
     plt.legend(loc='upper right')
     plt.title("percentiles")
     # plt.savefig("percentiles{}.png".format("_".join(str(r) for r in percentiles_ranges)))
@@ -180,7 +174,7 @@ def plot_percentiles_vs_no_options(percentiles, percentiles_ranges, no_options, 
     plt.plot(xs, visible_no_options, label="no options", color="red")
     plt.legend(loc='upper left')
     plt.title("percentiles and no options")
-    plt.savefig("percentiles_and_no_options{}.png".format("_".join(str(r) for r in percentiles_ranges)))
+    plt.savefig("percentiles_and_no_options{}.png".format("_".join(str(r) for r in (xs[0], xs[-1]))))
     return percentiles, percentiles_ranges
 
 
@@ -205,6 +199,7 @@ def plot_best_option_distribution(percentiles, percentiles_ranges, scores, xs, x
 
 # @disk_utils.disk_cache
 def get_score_history(scores, xs_full, xs):
+    xs = set(xs)
     score_history = {}
     for score_idx, nr_iter in enumerate(xs):
         score_history[nr_iter] = []

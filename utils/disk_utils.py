@@ -38,6 +38,7 @@ def disk_cache(function):
             with storage_fn(cache_file, "rb") as fin:
                 retr = pickle.load(fin)
         except FileNotFoundError:
+            print("cache miss: {}, {}".format(function.__name__, cache_file))
             retr = function(*args, **kwargs)
             if not os.path.exists(cache_file):
                 cache_folder = cache_file[:cache_file.rindex("/")]

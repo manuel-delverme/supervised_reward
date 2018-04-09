@@ -1,18 +1,14 @@
-import collections
-import math
 import itertools
 import random
 import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
-import disk_utils
+from utils import disk_utils, options_utils
 import envs.gridworld
 import envs.hungry_thirsty
 import envs.simple_boxes
 import learners.double_q_learning
 import learners.q_learning
-import options_utils
-import os
 
 
 def hack():

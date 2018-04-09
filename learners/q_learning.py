@@ -1,10 +1,8 @@
-import functools
 import random
 import time
 
 import numpy as np
-import disk_utils
-import envs.gridworld
+from utils import disk_utils
 
 TERMINATE_OPTION = -1
 
@@ -321,8 +319,12 @@ def learn_option(goal, mdp):
         # return 1 if goal == _mdp._hash_state() else -1
         return 1 if goal == _mdp.agent_position_idx else -1
 
+    # import learners
+    # learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
+    # _, _, fitnesses = learner.learn(xs=xs)
+
     learner = QLearning(env=mdp, options=None, surrogate_reward=surrogate_reward, goal=goal)
-    _ = learner.learn(xs=[200000, ])
+    _, _, fitnesses = learner.learn(xs=[200000, ])
     option = np.argmax(learner.Q, axis=1)
 
     state_idx = goal
