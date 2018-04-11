@@ -9,18 +9,6 @@ TERMINATE_OPTION = -1
 
 class QLearning(object):
     def __init__(self, env, options=None, epsilon=0.1, gamma=0.90, alpha=0.2, surrogate_reward=None, goal=None):
-
-        # self.learning_state = {
-        #     'time_steps_under_option' : 0,
-        #     'self.option_begin_state' : None,
-        #     'self.action_idx' : None,
-        #     'self.primitive_action' : None,
-        #     'self.option_goals' : set(),
-        #     'self.discounted_reward_under_option' : 0,
-        #     'self.fitness' : 0,
-        #     'self.cumulative_reward' : 0,
-        #     'self.terminal' : True,
-        # }
         self.goal = goal
         self.epsilon = epsilon
         self.starting_epsilon = epsilon
@@ -37,7 +25,6 @@ class QLearning(object):
             self.available_actions.extend(options)
             action_size += len(options)
             for option in options:
-                # goal = np.argwhere(action == -1)[0]
                 assert isinstance(option, tuple)
                 self.action_to_id[option] = len(self.action_to_id)
         self.Q = 0.00001 * np.random.rand(env.observation_space.n, action_size)
@@ -45,7 +32,6 @@ class QLearning(object):
         self.qargmax = np.argmax(self.Q, axis=1)
         self.surrogate_reward = surrogate_reward
 
-    # @functools.lru_cache(maxsize=1024) # TODO: reset cache if policy changes
     def pick_action_test(self, state, old_action_idx, old_primitive_action):
         return self.pick_action(state, old_action_idx, old_primitive_action, explore=True)
 
@@ -162,25 +148,6 @@ class QLearning(object):
                 fitnesses.append(test_fitness)
         fitnesses.append(fitness)
 
-        # save state
-        # self.cumulative_reward = cumulative_reward
-        # self.fitness = fitness
-        # self.time_steps_under_option = time_steps_under_option
-        # self.discounted_reward_under_option = discounted_reward_under_option
-
-        # self.option_begin_state = option_begin_state
-        # self.action_idx = action_idx
-        # self.primitive_action = primitive_action
-        # self.old_state = old_state
-        # self.new_state = new_state
-
-        # self.terminal = terminal = False
-
-        # self.old_state = old_state
-        # self.new_state = new_state
-        # time_steps_under_option = 0
-        # option_begin_state = None
-
         opts = self.available_actions[self.environment.action_space.n:]
         return opts, cumulative_reward, fitnesses
 
@@ -287,13 +254,11 @@ def main():
 
     option_vec = [option_vec0, option_vec1]
 
-    option_set_score = {}
     mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=box_positions)
     learner = QLearning(env=mdp, options=option_vec)
 
     training_time = 0
     testing_time = 0
-    # for _ in tqdm.tqdm(range(100)):
     for it in range(10):
         print(it)
         learner = QLearning(env=mdp, options=option_vec, test_run=False)

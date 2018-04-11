@@ -1,4 +1,5 @@
 import pickle
+import numpy as np
 import sys
 import os
 import hashlib
@@ -16,9 +17,15 @@ def disk_cache(function):
             for arg in args:
                 if isinstance(arg, dict):
                     arg = list(arg.keys())[:100]
-                arg = str(arg)
-                if len(arg) > 100:
-                    arg = hashlib.sha1(arg.encode('utf-8')).hexdigest()
+                if isinstance(arg, list) and len(arg) > 0 and isinstance(arg[0], tuple):
+                    new_arg = []
+                    for option_policy in arg:
+                        new_arg.append(option_policy.index(-1))
+                    arg = str(new_arg)
+                else:
+                    arg = str(arg)
+                    if len(arg) > 100:
+                        arg = hashlib.sha1(arg.encode('utf-8')).hexdigest()
                 args_filtered.append(arg.replace("/", "_"))
             if function.__name__ == "eval_option_on_mdp":
                 option_hash = args_filtered[-2]
@@ -38,7 +45,7 @@ def disk_cache(function):
             with storage_fn(cache_file, "rb") as fin:
                 retr = pickle.load(fin)
         except FileNotFoundError:
-            print("cache miss: {}, {}".format(function.__name__, cache_file))
+            # print("cache miss: {}, {}".format(function.__name__, cache_file))
             retr = function(*args, **kwargs)
             if not os.path.exists(cache_file):
                 cache_folder = cache_file[:cache_file.rindex("/")]

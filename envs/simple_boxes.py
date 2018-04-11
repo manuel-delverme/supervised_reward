@@ -107,6 +107,9 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         self.box2_is_full = True
         return self._hash_state()
 
+    def teleport_agent(self, tile_idx):
+        self.agent_position_idx = tile_idx
+
     def show_board(self, some_matrix=None, close=False, policy=None, highlight_square=None, info={}, option_vec=(),
                    highlight_squares=(), ):
         if close:
@@ -301,7 +304,7 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
     @classmethod
     @disk_utils.disk_cache
     def eval_option_on_complex_mdp(cls, SIDE_SIZE, box_positions, option_vec, xs):
-        mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions)
+        mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions, composite_actions=True)
         learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
         _, _, fitnesses = learner.learn(xs=xs)
         return fitnesses

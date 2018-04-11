@@ -1,4 +1,5 @@
 import itertools
+import multiprocessing
 import random
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,10 +15,13 @@ import argparse
 
 def parser_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--uniform_food_position,', action='store_true')
-
+    parser.add_argument('--uniform_food_position', action='store_true')
+    parser.add_argument('--batch_idx', type=int)
+    args = parser.parse_args()
+    return args
 
 opt = parser_args()
+print(opt)
 
 
 @disk_utils.disk_cache
@@ -64,10 +68,14 @@ def bruteforce_options_complex_world():
     possible_tiles = [position_idx for position_idx in range(token_mdp.number_of_tiles) if
                       position_idx not in token_mdp._walls]
     option_sets = itertools.combinations([None] * NUMBER_OF_OPTIONS + possible_tiles, NUMBER_OF_OPTIONS)
-    option_sets = list(option_sets)
-    random.shuffle(option_sets)
 
-    xs = [10 + 10 * x for x in range(500)]
+    nr_batches = 16
+    option_sets = list(option_sets)
+    batch_size = len(option_sets) // nr_batches
+    # random.shuffle(option_sets)
+
+    xs = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 750, 1000] #, 1500, 2000, 2500, 3000, 4000, 5000]
+    print("recording steps:", list(xs))
     possible_box_positions = list(itertools.combinations(
         [
             0,
@@ -78,16 +86,35 @@ def bruteforce_options_complex_world():
     learner = learners.q_learning.QLearning(env=token_mdp, options=[])
 
     option_map = {tuple(): tuple()}
+    assert_batch_nalloc(opt.batch_idx)
+
     for goal_idx in range(token_mdp.number_of_tiles):
         option_map[goal_idx] = options_utils.goal_to_policy(learner, goal_idx, token_mdp)
 
     option_sets_scores = {}
-    for option_set in tqdm.tqdm(option_sets):
+
+    batch_start = batch_size * opt.batch_idx
+    batch_end = batch_size * (opt.batch_idx + 1)
+    batch_data = option_sets[batch_start: batch_end]
+    # batch_data = option_sets
+
+    for option_set in tqdm.tqdm(batch_data):
         options = [option_map[goal_idx] for goal_idx in option_set if goal_idx is not None]
         option_sets_scores[option_set] = options_utils.eval_options_on_complex_mdp(
             SIDE_SIZE, options, possible_box_positions, xs
         )
     return option_sets_scores
+
+
+def assert_batch_nalloc(batch_idx):
+    try:
+        with open("/tmp/batch_{}".format(batch_idx), "r") as fin:
+            pass
+    except FileNotFoundError:
+        with open("/tmp/batch_{}".format(batch_idx), "w") as fout:
+            pass
+    else:
+        raise Exception("Batch already in use")
 
 
 def plot_option_scores():
