@@ -58,10 +58,11 @@ def name_options(options):
 
 
 def goal_to_policy(learner, o, token_mdp):
-    token_mdp.agent_position_idx = o
-    learner.generate_option()
-    option_vec = tuple(learner.available_actions[-1])
-    return option_vec
+    # token_mdp.agent_position_idx = o
+    # learner.generate_option()
+    # option_vec = tuple(learner.available_actions[-1])
+    # return option_vec
+    return reach_goal_policy(o, token_mdp)
 
 
 def generate_option_map(learner, token_mdp):
@@ -112,3 +113,49 @@ def generate_do_option(act, option_length, token_mdp):
             action = act
         option_policy.append(action)
     return option_policy
+
+
+class one_step_policy():
+    def __init__(self, act):
+        self.seq = None
+        self.act = act
+
+    def __getitem__(self, state):
+        if not self.seq:
+            offset = 49 * 2 * 2
+            previous_action = state // offset
+            previous_action -= 1
+
+            if previous_action == -1:
+                seq = [self.act, self.act, -1]
+            elif previous_action == self.act:
+                seq = [self.act, -1]
+            else:
+                seq = [random.randint(0, 4), self.act, self.act, -1]
+            self.seq = seq
+        return self.seq.pop(0)
+
+
+class reach_goal_policy():
+    def __init__(self, goal_idx, mdp):
+        self.goal_idx = goal_idx
+        policy = {
+            goal_idx: -1,
+        }
+        frontier = [goal_idx, ]
+        closed = set()
+        opposite_action = [2, 3, 0, 1]
+        while frontier:
+            node = frontier.pop(0)
+            for action, transs in mdp.transition_matrix[node].items():
+                for trans in transs:
+                    prob, position, reward, terminal = trans
+                    if trans == 1.0:
+                        policy[position] = opposite_action[action]
+                        frontier.append(position)
+                closed.add(goal_idx)
+        self.policy = policy
+
+    def __getitem__(self, state):
+        position_idx = state_to_position(state)
+        return self.seq.pop(0)

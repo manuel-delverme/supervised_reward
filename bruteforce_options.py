@@ -76,41 +76,16 @@ def test_options(side_size=7, use_compelx_options=False):
     # option_set = list(token_mdp.get_walkable_tiles())
     option_set = []
     learner = learners.q_learning.QLearning(env=token_mdp, options=[])
-    # option_map = options_utils.generate_option_map(learner, token_mdp)
+    option_map = options_utils.generate_option_map(learner, token_mdp)
 
     if use_compelx_options:
         complex_options = tuple('do' + str(act) for act in range(token_mdp.action_space.n))
         option_set.extend(complex_options)
-
     import time
-
-    class policy():
-        def __init__(self, act):
-            self.seq = None
-            self.act = act
-
-        def __getitem__(self, state):
-            if not self.seq:
-                offset = 1
-                offset *= 49
-                offset *= 2
-                offset *= 2
-                # offset *= 4 + 1
-                previous_action = s // offset
-                previous_action -= 1
-
-                if previous_action == -1:
-                    seq = [self.act, self.act, -1]
-                elif previous_action == self.act:
-                    seq = [self.act, -1]
-                else:
-                    seq = [random.randint(0, 4), self.act, self.act, -1]
-                self.seq = seq
-            return self.seq.pop(0)
 
     for option_id in option_set:
         # option_policy = option_map[option_id]
-        option_policy = policy(int(option_id[-1]))
+        option_policy = options_utils.one_step_policy(int(option_id[-1]))
         print(option_id)
         mdp = envs.simple_boxes.BoxWorldSimple(side_size=side_size, composite_actions=True)
         mdp.show_board()
