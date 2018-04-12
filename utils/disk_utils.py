@@ -20,7 +20,12 @@ def disk_cache(function):
                 if isinstance(arg, list) and len(arg) > 0 and isinstance(arg[0], tuple):
                     new_arg = []
                     for option_policy in arg:
-                        new_arg.append(option_policy.index(-1))
+                        used_acts = np.unique(np.argwhere(option_policy != -1))
+                        if len(used_acts) == 1:
+                            option_name = 'do' + str(used_acts, )
+                        else:
+                            option_name = option_policy.index(-1)
+                        new_arg.append(option_name)
                     arg = str(new_arg)
                 else:
                     arg = str(arg)
@@ -58,3 +63,15 @@ def disk_cache(function):
                 pickle.dump(retr, fout)
         return retr
     return wrapper
+
+
+def assert_batch_nalloc(batch_idx):
+    try:
+        with open("/tmp/batch_{}".format(batch_idx), "r") as fin:
+            pass
+    except FileNotFoundError:
+        with open("/tmp/batch_{}".format(batch_idx), "w") as fout:
+            pass
+    else:
+        raise Exception("Batch already in use")
+

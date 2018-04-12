@@ -1,8 +1,5 @@
 import itertools
-import multiprocessing
 import random
-import matplotlib.pyplot as plt
-import numpy as np
 import tqdm
 from utils import disk_utils, options_utils
 import envs.gridworld
@@ -20,242 +17,122 @@ def parser_args():
     args = parser.parse_args()
     return args
 
+
 opt = parser_args()
 print(opt)
 
 
 @disk_utils.disk_cache
-def get_no_option_score(time_budget):
-    scores = bruteforce_options()
-    return scores[(None, None, None, None)][int(time_budget / 10)]
-
-
-@disk_utils.disk_cache
 def bruteforce_options():
-    NUMBER_OF_OPTIONS = 4
-    SIDE_SIZE = 7
-    token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=SIDE_SIZE)
-
-    possible_tiles = [position_idx for position_idx in range(token_mdp.number_of_tiles) if
-                      position_idx not in token_mdp._walls]
-    option_sets = itertools.combinations([None] * NUMBER_OF_OPTIONS + possible_tiles, NUMBER_OF_OPTIONS)
-    option_sets = list(option_sets)
-    random.shuffle(option_sets)
-
-    xs = [10 + 10 * x for x in range(1000)]
-    possible_box_positions = list(itertools.combinations([0, SIDE_SIZE - 1, (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
-                                                          SIDE_SIZE * SIDE_SIZE - 1, ], 2))
-    learner = learners.q_learning.QLearning(env=token_mdp, options=[])
-
-    option_map = {tuple(): tuple()}
-    for goal_idx in range(token_mdp.number_of_tiles):
-        option_map[goal_idx] = options_utils.goal_to_policy(learner, goal_idx, token_mdp)
-
-    # import ipdb, ipdb.set_trace()
-    option_sets_scores = {}
-    for option_set in tqdm.tqdm(option_sets):
-        options = [option_map[goal_idx] for goal_idx in option_set if goal_idx is not None]
-        option_sets_scores[option_set] = options_utils.eval_options(SIDE_SIZE, options, possible_box_positions, xs)
-    return option_sets_scores
+    # used to load old version cached file
+    pass
 
 
 @disk_utils.disk_cache
-def bruteforce_options_complex_world():
-    NUMBER_OF_OPTIONS = 4
-    SIDE_SIZE = 7
-    token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=SIDE_SIZE, composite_actions=True)
+def bruteforce_options_complex_world(nr_of_options=4, side_size=7, complex_actions=True, use_compelx_options=False):
+    # steps_to_record = [10 + 10 * x for x in range(1000)]
 
-    possible_tiles = [position_idx for position_idx in range(token_mdp.number_of_tiles) if
-                      position_idx not in token_mdp._walls]
-    option_sets = itertools.combinations([None] * NUMBER_OF_OPTIONS + possible_tiles, NUMBER_OF_OPTIONS)
-
+    steps_to_record = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 750,
+                       1000]  # , 1500, 2000, 2500, 3000, 4000, 5000]
     nr_batches = 16
-    option_sets = list(option_sets)
-    batch_size = len(option_sets) // nr_batches
-    # random.shuffle(option_sets)
 
-    xs = [50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 750, 1000] #, 1500, 2000, 2500, 3000, 4000, 5000]
-    print("recording steps:", list(xs))
-    possible_box_positions = list(itertools.combinations(
-        [
-            0,
-            SIDE_SIZE - 1,
-            (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
-            SIDE_SIZE * SIDE_SIZE - 1,
-        ], 2))
+    token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=side_size, composite_actions=True)
+
+    possible_tiles = token_mdp.get_walkable_tiles()
+    option_sets = list(itertools.combinations([None] * nr_of_options + possible_tiles, nr_of_options))
+    possible_box_positions = token_mdp.get_box_psoitions()
+
+    print("recording steps:", list(steps_to_record))
     learner = learners.q_learning.QLearning(env=token_mdp, options=[])
 
-    option_map = {tuple(): tuple()}
-    assert_batch_nalloc(opt.batch_idx)
+    if opt.batch_idx != -1:
+        disk_utils.assert_batch_nalloc(opt.batch_idx)
+    else:
+        opt.batch_idx *= -1
 
-    for goal_idx in range(token_mdp.number_of_tiles):
-        option_map[goal_idx] = options_utils.goal_to_policy(learner, goal_idx, token_mdp)
+    option_map = options_utils.generate_option_map(learner, token_mdp)
+
+    # do = []
+    if use_compelx_options:
+        complex_options = tuple('do' + str(act) for act in range(token_mdp.action_space.n))
+        option_sets = [o + complex_options for o in option_sets]
 
     option_sets_scores = {}
-
+    batch_size = len(option_sets) // nr_batches
     batch_start = batch_size * opt.batch_idx
     batch_end = batch_size * (opt.batch_idx + 1)
     batch_data = option_sets[batch_start: batch_end]
-    # batch_data = option_sets
 
     for option_set in tqdm.tqdm(batch_data):
         options = [option_map[goal_idx] for goal_idx in option_set if goal_idx is not None]
         option_sets_scores[option_set] = options_utils.eval_options_on_complex_mdp(
-            SIDE_SIZE, options, possible_box_positions, xs
+            side_size, options, possible_box_positions, steps_to_record
         )
     return option_sets_scores
 
 
-def assert_batch_nalloc(batch_idx):
-    try:
-        with open("/tmp/batch_{}".format(batch_idx), "r") as fin:
-            pass
-    except FileNotFoundError:
-        with open("/tmp/batch_{}".format(batch_idx), "w") as fout:
-            pass
-    else:
-        raise Exception("Batch already in use")
+def test_options(side_size=7, use_compelx_options=False):
+    token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=side_size, composite_actions=True)
+    # option_set = list(token_mdp.get_walkable_tiles())
+    option_set = []
+    learner = learners.q_learning.QLearning(env=token_mdp, options=[])
+    # option_map = options_utils.generate_option_map(learner, token_mdp)
 
+    if use_compelx_options:
+        complex_options = tuple('do' + str(act) for act in range(token_mdp.action_space.n))
+        option_set.extend(complex_options)
 
-def plot_option_scores():
-    xs_full = [10 + 10 * x for x in range(1000)]
-    print("bruteforce_options")
-    # scores = bruteforce_options()
-    scores = bruteforce_options_complex_world()
-    print("top_worst_scores")
-    no_options = scores[(None, None, None, None)]
-    percentiles_ranges = [1, 50, 90, 95, 99, 99.9, 100]
-    fig = plt.figure(1)
+    import time
 
-    for xs in (list(range(10, 510, 10)), list(range(500, 1010, 10)), list(range(1000, 5010, 10))):
-        print("get_score_history")
-        score_history = get_score_history(scores, xs_full, xs)
+    class policy():
+        def __init__(self, act):
+            self.seq = None
+            self.act = act
 
-        percentiles = [{} for nr_iter in percentiles_ranges]
-        for nr_iter in tqdm.tqdm(xs, desc="percentiels"):
-            z = np.percentile(score_history[nr_iter], percentiles_ranges)
-            for idx, perc in enumerate(percentiles_ranges):
-                percentiles[idx][nr_iter] = z[idx]
+        def __getitem__(self, state):
+            if not self.seq:
+                offset = 1
+                offset *= 49
+                offset *= 2
+                offset *= 2
+                # offset *= 4 + 1
+                previous_action = s // offset
+                previous_action -= 1
 
-        plot_percentiles_vs_no_options(percentiles, percentiles_ranges, no_options, xs_full, xs)
-        fig.clear()
+                if previous_action == -1:
+                    seq = [self.act, self.act, -1]
+                elif previous_action == self.act:
+                    seq = [self.act, -1]
+                else:
+                    seq = [random.randint(0, 4), self.act, self.act, -1]
+                self.seq = seq
+            return self.seq.pop(0)
 
+    for option_id in option_set:
+        # option_policy = option_map[option_id]
+        option_policy = policy(int(option_id[-1]))
+        print(option_id)
+        mdp = envs.simple_boxes.BoxWorldSimple(side_size=side_size, composite_actions=True)
+        mdp.show_board()
+        s = mdp.reset()
+        for env_iter in range(100):
+            mdp.show_board()
 
-def plot_distribution_vs_no_options(no_options, score_history, xs):
-    X, Y = [], []
-    for nr_iter in tqdm.tqdm(score_history, desc="plot distribution"):
-        for s in score_history[nr_iter]:
-            X.append(nr_iter)
-            Y.append(s)
-    print("plotting")
-    domain = int(max(X) / 10) + 1
-    plt.plot(range(0, 501, 10), no_options[:domain], label="no options")
-    plt.scatter(X, Y, label="distr", alpha=0.05, s=0.5, antialiased=False)
-    plt.legend(loc='upper left')
-    plt.title("percentiles and no options")
-    plt.savefig("distr_and_no_options{}.png".format(str(xs[0]) + str(xs[-1])))
-    print("plotted")
+            a = option_policy[s]
+            mdp.show_board()
+            s, r, d, _ = mdp.step(a)
+            mdp.show_board()
 
-
-def plot_p_noopt_better_opts(no_options, score_history):
-    p_above = []
-    for nr_iter in tqdm.tqdm(sorted(score_history.keys()), desc="plot distribution"):
-        above_no_opt = 0
-        below_no_opt = 0
-        no_opt_score = no_options[nr_iter // 10]
-        for option_set_score in score_history[nr_iter]:
-            if option_set_score < no_opt_score:
-                below_no_opt += 1
+            if a != -1:
+                print("step", a)
+                s, r, d, _ = mdp.step(a)
+                mdp.show_board()
+                time.sleep(1)
             else:
-                above_no_opt += 1
-        optset_total = (below_no_opt + above_no_opt)
-        above_no_opt /= optset_total
-        below_no_opt /= optset_total
-        p_above.append(1 + above_no_opt)
-    p_above = p_above[10:]
-    plt.ylim(np.log(min(p_above)), np.log(max(p_above)))
-    plt.plot(np.log(p_above))
-    plt.savefig("p_above.png")
-    print(p_above)
-
-
-def plot_percentiles_vs_no_options(percentiles, percentiles_ranges, no_options, xs_full, xs):
-    visible_no_options = []
-    # xs_full = [10 + 10 * x for x in range(1000)]
-    for idx, x in enumerate(xs_full):
-        if x in xs:
-            visible_no_options.append(no_options[idx])
-
-    for percentile_idx, perc in tqdm.tqdm(enumerate(percentiles_ranges), desc="plot percs"):
-        ys = []
-        for iter_budget in xs_full:
-            if iter_budget in xs:
-                ys.append(percentiles[percentile_idx][iter_budget])
-        # plt.plot(x_labels, ys, '-', label="perc:" + str(perc))
-        plt.plot(xs, ys, label="percentile:" + str(perc), alpha=0.7)
-
-    plt.legend(loc='upper right')
-    plt.title("percentiles")
-    # plt.savefig("percentiles{}.png".format("_".join(str(r) for r in percentiles_ranges)))
-    plt.set_cmap("jet")
-    plt.plot(xs, visible_no_options, label="no options", color="red")
-    plt.legend(loc='upper left')
-    plt.title("percentiles and no options")
-    plt.savefig("percentiles_and_no_options{}.png".format("_".join(str(r) for r in (xs[0], xs[-1]))))
-    return percentiles, percentiles_ranges
-
-
-def plot_best_option_distribution(percentiles, percentiles_ranges, scores, xs, xs_full):
-    cutoff = {nr_iter: percentiles[percentiles_ranges.index(99.9)][nr_iter] for nr_iter in xs}
-    best_sets = {}
-    for nr_iter in xs:
-        best_sets[nr_iter] = []
-    print("best sets")
-    for option_ids, option_scores in tqdm.tqdm(scores.items(), desc="best sets"):
-        for iter_idx, option_score in enumerate(option_scores):
-            nr_iter = xs_full[iter_idx]
-            if nr_iter in xs:
-                if option_score > cutoff[nr_iter]:
-                    best_sets[nr_iter].append((option_ids, option_score))
-    for nr_iter in best_sets.copy().keys():
-        best_sets[nr_iter].sort(key=lambda _x: -_x[1])
-    import pickle
-    with open("best_sets.pkl", "wb") as fout:
-        pickle.dump(best_sets, fout)
-
-
-# @disk_utils.disk_cache
-def get_score_history(scores, xs_full, xs):
-    xs = set(xs)
-    score_history = {}
-    for score_idx, nr_iter in enumerate(xs):
-        score_history[nr_iter] = []
-    for option_ids, option_scores in tqdm.tqdm(scores.items(), desc="score history"):
-        for score_idx, nr_iter in enumerate(xs_full):
-            if nr_iter in xs:
-                option_score = option_scores[score_idx]
-                score_history[nr_iter].append(option_score)
-    return score_history
-
-
-@disk_utils.disk_cache
-def top_worst_scorers(scores, xs):
-    top_scorers = {}
-    worst_scorers = {}
-    for option_ids, option_scores in scores.items():
-        for score_idx, nr_iter in enumerate(xs):
-            option_score = option_scores[score_idx]
-            top_scorers[nr_iter] = (option_ids, option_score)
-            worst_scorers[nr_iter] = (option_ids, option_score)
-    for option_ids, option_scores in tqdm.tqdm(scores.items()):
-        for score_idx, nr_iter in enumerate(xs):
-            option_score = option_scores[score_idx]
-            if top_scorers[nr_iter][1] < option_score:
-                top_scorers[nr_iter] = (option_ids, option_score)
-            if worst_scorers[nr_iter][1] > option_score:
-                worst_scorers[nr_iter] = (option_ids, option_score)
-    return top_scorers, worst_scorers
+                print("reset")
+                s = mdp.reset()
 
 
 if __name__ == "__main__":
-    plot_option_scores()
+    # bruteforce_options_complex_world(2, 7, True, True)
+    test_options(7, True)

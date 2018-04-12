@@ -25,7 +25,7 @@ class _BoxState(enum.Enum):
 
 class BoxWorldSimple(envs.gridworld.GridWorld):
     def __init__(self, side_size, box_positions=(), agent_lifetime=5, composite_actions=False):
-        super(BoxWorldSimple, self).__init__(side_size, terminal_states=(), base_transition_probability=0.9,)
+        super(BoxWorldSimple, self).__init__(side_size, terminal_states=(), base_transition_probability=0.9, )
         self._lifetime = agent_lifetime
         self.time_left = agent_lifetime
         self.box1_is_full = None
@@ -33,8 +33,7 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         self.box_positions = box_positions
 
         self.composite_actions = composite_actions
-        self.action_history = collections.deque(maxlen=2)
-        self.action_history.extend([3, 3])  # history always starts form the same state, 3s are odd made up numbers
+        self.previous_action = -1
 
         self.reset()
 
@@ -42,18 +41,24 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
 
         extra_dof = (len(_BoxState) ** 2)
         if composite_actions:
-            extra_dof *= (len(self.action_history) ** self.action_space.n)
+            extra_dof *= self.action_space.n + 1
         self.observation_space = gym.spaces.Discrete(self.observation_space.n * extra_dof)
 
     def _step(self, action):
         assert self.time_left >= 0
+        # assert action in range(self.action_space.n)
 
-        if self.action_history == action:
-            tile_idx, gridworld_reward, gridworld_terminal, info = super(envs.gridworld.GridWorld, self)._step(action)
-        else:
+        if self.composite_actions and self.previous_action == -1:
+            # only half action
+            self.previous_action = action
             info = {}
-
-        self.action_history.append(action)
+        elif not self.composite_actions or self.previous_action == action:
+            # action succeeds
+            tile_idx, gridworld_reward, gridworld_terminal, info = super(envs.gridworld.GridWorld, self)._step(action)
+            self.previous_action = -1
+        else:
+            # action fails
+            self.previous_action = -1
 
         reward = -1
         if len(self.box_positions) > 0:
@@ -94,10 +99,8 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         offset *= 2
 
         if self.composite_actions:
-            state_hash += self.action_history[0] * offset
-            offset *= self.action_space.n
-            state_hash += self.action_history[1] * offset
-            offset *= self.action_space.n
+            state_hash += (1 + self.previous_action) * offset
+            offset *= self.action_space.n + 1
         return state_hash
 
     def reset(self):
@@ -105,13 +108,14 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         self.time_left = self._lifetime
         self.box1_is_full = True
         self.box2_is_full = True
+        self.previous_action = -1
         return self._hash_state()
 
     def teleport_agent(self, tile_idx):
         self.agent_position_idx = tile_idx
 
     def show_board(self, some_matrix=None, close=False, policy=None, highlight_square=None, info={}, option_vec=(),
-                   highlight_squares=(), ):
+                   highlight_squares=(), state_offset=None):
         if close:
             return
         if self.gui is None:
@@ -119,6 +123,7 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         info.update({
             'box1_is_full': self.box1_is_full,
             'box2_is_full': self.box2_is_full,
+            'action_history': self.previous_action,
         })
         action_names = [o.index(-1) for o in option_vec]
         if len(self.box_positions) > 0:
@@ -129,6 +134,9 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         else:
             boxes_state = {}
 
+        if state_offset is None:
+            state_offset = self.number_of_tiles * (self._hash_state() // self.number_of_tiles)
+
         self.gui.render_board(
             player_position=self.agent_position_idx,
             boxes=boxes_state,
@@ -138,7 +146,7 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
             highlight_square=highlight_square,
             highlight_squares=highlight_squares,
             info=info,
-            state_offset=self.number_of_tiles * (self._hash_state() // self.number_of_tiles),
+            state_offset=state_offset,
             action_names=action_names,
         )
 
@@ -150,6 +158,11 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
 
     def __str__(self):
         return self.__repr__()
+
+    def get_walkable_tiles(self):
+        walkable_tiles = [
+            position_idx for position_idx in range(self.number_of_tiles) if position_idx not in self._walls]
+        return walkable_tiles
 
     @staticmethod
     def get_fitness_fn(SIDE_SIZE):
@@ -295,7 +308,8 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
     @disk_utils.disk_cache
     def eval_option_on_mdp(cls, SIDE_SIZE, box_positions, option_vec, xs):
         print("CACHE MISS! shouldn't happen")
-        import ipdb; ipdb.set_trace()
+        import ipdb;
+        ipdb.set_trace()
         mdp = cls(side_size=SIDE_SIZE, box_positions=box_positions)
         learner = learners.q_learning.QLearning(env=mdp, options=option_vec)
         _, _, fitnesses = learner.learn(xs=xs)
@@ -324,4 +338,15 @@ class BoxWorldSimple(envs.gridworld.GridWorld):
         sigma = np.var(samples, axis=0)
         mu = np.mean(samples, axis=0)
         return mu, sigma
+
+    def get_box_psoitions(self):
+        possible_box_positions = list(
+            itertools.combinations(
+                [
+                    0,
+                    self.width - 1,
+                    (self.width * self.height) - self.height,
+                    self.width * self.height - 1,
+                ], 2))
+        return possible_box_positions
 

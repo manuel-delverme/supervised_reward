@@ -25,7 +25,6 @@ class QLearning(object):
             self.available_actions.extend(options)
             action_size += len(options)
             for option in options:
-                assert isinstance(option, tuple)
                 self.action_to_id[option] = len(self.action_to_id)
         self.Q = 0.00001 * np.random.rand(env.observation_space.n, action_size)
         self.qmax = np.max(self.Q, axis=1)
@@ -59,8 +58,8 @@ class QLearning(object):
         return action_idx, primitive_action_idx
 
     def learn(self, generate_options=False, plot_every=None, xs=None,):
-        if xs is not None:
-            xs = set(xs)
+        xs = set(xs)
+
         cumulative_reward = 0
         fitness = 0
         time_steps_under_option = 0

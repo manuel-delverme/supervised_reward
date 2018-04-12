@@ -1,4 +1,7 @@
 import numpy as np
+import utils.disk_utils
+import tqdm
+import random
 import envs.simple_boxes as e
 import learners.double_q_learning
 import learners.q_learning
@@ -59,3 +62,53 @@ def goal_to_policy(learner, o, token_mdp):
     learner.generate_option()
     option_vec = tuple(learner.available_actions[-1])
     return option_vec
+
+
+def generate_option_map(learner, token_mdp):
+    goal_idxs = list(range(token_mdp.number_of_tiles))
+    random.shuffle(goal_idxs)
+    option_map = {tuple(): tuple()}
+    for goal_idx in goal_idxs:
+        option_map[goal_idx] = goal_to_policy(learner, goal_idx, token_mdp)
+
+    sample_option = list(option_map.values())[0]
+    for act in range(token_mdp.action_space.n):
+        option_name = 'do' + str(act)
+        option_polciy = generate_do_option(act, len(sample_option), token_mdp)
+        option_map[option_name] = tuple(option_polciy)
+    return option_map
+
+
+@utils.disk_utils.disk_cache
+def generate_do_option(act, option_length, token_mdp):
+    option_policy = []
+    for state_idx in tqdm.tqdm(range(option_length), total=option_length, desc="generating do{}".format(act)):
+        class option_policy:
+            def __init__(self):
+                self.s0 = None
+                self.seq = [act, act, -1]
+
+            def __getitem__(self, s):
+                if self.s0 is None:
+                    hist = self.get_action_history(s)
+
+            """
+        def get_action_history(self, s):
+            offset = 1
+            offset *= self.number_of_tiles
+            offset *= 2
+            offset *= 2
+            offset *= self.action_space.n
+            a1 = s // offset
+            offset *= self.action_space.n
+            a0 = s // offset
+            return [a0, a1]
+                """
+
+        act_hist = token_mdp.get_action_history(state_idx)
+        if act_hist == [act, act]:
+            action = -1
+        else:
+            action = act
+        option_policy.append(action)
+    return option_policy
