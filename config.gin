@@ -1,5 +1,5 @@
 main.experiment_id = 'intrinsic only'
-main.cmaes_population = 4
+main.cmaes_population = 15
 main.training_steps = 10000
 main.eval_training_steps = 2000
 main.eval_test_steps = 1000

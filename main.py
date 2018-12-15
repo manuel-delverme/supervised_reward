@@ -130,7 +130,7 @@ def generate_fitness_fn(
             return mdp
 
         fitness = utils.eval_options(_load_env, options, possible_box_positions, xs=[eval_training_steps, ])
-        return fitness
+        return fitness, options
 
     return fitness_hungry_thirsty
 
