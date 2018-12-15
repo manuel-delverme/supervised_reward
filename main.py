@@ -11,16 +11,8 @@ import gin
 
 
 @gin.configurable
-def main(
-        experiment_id,
-        cmaes_population=5,
-        training_steps=int(1e5),
-        eval_training_steps=int(2e3),
-        eval_test_steps=int(1e3),
-        side_size=7,
-        evolution_iters=int(1e6),
-        env_name="hungry-thirsty",
-):
+def main(experiment_id, cmaes_population, training_steps, eval_training_steps, eval_test_steps, side_size,
+         evolution_iters, env_name):
     if env_name == "hungry-thirsty":
         fitness_fn = generate_fitness_fn(
             envs.hungry_thirsty.HungryThirsty,
@@ -109,7 +101,7 @@ def generate_fitness_fn(
         args_dict = {k: v for k, v in args}
         del args
 
-        reward_vector = np.array(args_dict['weights'])
+        reward_vector = args_dict['weights']
         possible_box_positions = list(args_dict['possible_box_positions'])
 
         side_size = args_dict['side_size']
@@ -121,10 +113,14 @@ def generate_fitness_fn(
             side_size=side_size, box1=box1, box2=box2
         )
 
-        def intrinsic_reward_function(state):
-            return reward_vector[state]
+        if reward_vector is None:
+            intrinsic_reward_function = None
+        else:
+            reward_vector = np.array(reward_vector)
 
-        # learner = learners.double_q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function, train_run=True,)
+            def intrinsic_reward_function(state):
+                return reward_vector[state]
+
         learner = learners.q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function)
         options, cum_reward, fitnesses = learner.learn(xs=[training_steps, ], generate_options=True)
 
@@ -137,23 +133,6 @@ def generate_fitness_fn(
         return fitness
 
     return fitness_hungry_thirsty
-
-
-def pick_random_options():
-    mdp = envs.boxes.BoxWorld(side_size=6, box_positions=())
-    options = []
-    # for goal in random.sample(range(mdp.number_of_tiles), random.randrange(1, 4)):
-    for goal in (0, 5, 30, 35):
-        opt = learners.double_q_learning.learn_option(goal, mdp)
-        # TODO: REMOVE HACK
-        if opt.shape[0] < mdp.observation_space.n:
-            # TODO: remove print("OPTION SIZE MISMATCH, TILING")
-            opt = np.tile(
-                opt[:mdp.number_of_tiles],
-                mdp.observation_space.n // mdp.number_of_tiles
-            )
-        options.append(opt)
-    return options
 
 
 if __name__ == "__main__":
