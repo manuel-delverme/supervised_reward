@@ -1,180 +1,142 @@
 import itertools
+from utils import utils
 import random
 import numpy as np
 import controller.meta_controller
 import envs.boxes
 import envs.gridworld
 import envs.hungry_thirsty
-import learners.double_q_learning
+import learners.q_learning
+import gin
 
 
-def main():
-    TRAINING_SIZE = 1
-    NR_EPOCHS = 1000
-    POPULATION_SIZE = 4
-    TRAINING_NO_CHANGE_STOP = 1000
-    GENERATE_RANDOM_OPTIONS = True
-    TRAINING_MAX_STEPS = 10000
-
-    TEST_MAX_STEPS_TRAIN = 2000
-    TEST_MAX_STEPS_EVAL = 1000
-    SIDE_SIZE = 6
-
-    env_name = "boxworld"  # "hungry-thirsty"
-
+@gin.configurable
+def main(
+        experiment_id,
+        cmaes_population=5,
+        training_steps=int(1e5),
+        eval_training_steps=int(2e3),
+        eval_test_steps=int(1e3),
+        side_size=7,
+        evolution_iters=int(1e6),
+        env_name="hungry-thirsty",
+):
     if env_name == "hungry-thirsty":
-        def fitness_hungry_thirsty(reward_vector):
-            # init a world
-            possible_box_positions = [
-                0,
-                SIDE_SIZE - 1,
-                SIDE_SIZE * SIDE_SIZE - 1,
-                (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
-            ]
-            _box_positions = []
-            for idx, box_pos in enumerate(possible_box_positions[:-1]):
-                _box_positions.append((box_pos, possible_box_positions[idx + 1]))
-                _box_positions.append((possible_box_positions[idx + 1], box_pos))
+        fitness_fn = generate_fitness_fn(
+            envs.hungry_thirsty.HungryThirsty,
+            eval_training_steps=eval_training_steps,
+            eval_test_steps=eval_test_steps,
+            training_steps=training_steps,
+        )
 
-            random.shuffle(_box_positions)
-            possible_box_positions = (p for p in _box_positions)
-
-            water_pos, food_pos = next(possible_box_positions)
-
-            if GENERATE_RANDOM_OPTIONS:
-                options = pick_random_options()
-            else:
-                print("training with water: {} food {}".format(water_pos, food_pos))
-                mdp = envs.hungry_thirsty.HungryThirsty(
-                    side_size=SIDE_SIZE, water_position=water_pos, food_position=food_pos
-                )
-
-                # define an intrinsic reward fn
-                def intrinsic_reward_function(_mdp):
-                    thirst = _mdp._state['thirsty']
-                    hunger = _mdp._state['hungry']
-                    x = np.array((
-                        thirst and hunger,
-                        not thirst and not hunger,
-                        thirst and not hunger,
-                        hunger and not thirst,
-                    ), dtype=np.int)
-                    # TODO: should be optimized as reward_vec[idx]
-                    return np.dot(reward_vector, x)
-
-                # generate option set
-                learner = learners.double_q_learning.QLearning(
-                    env=mdp,
-                    surrogate_reward=intrinsic_reward_function,
-                    train_run=True,
-                )
-                options, cum_reward = learner.learn(
-                    steps_of_no_change=TRAINING_NO_CHANGE_STOP,
-                    max_steps=TRAINING_MAX_STEPS,
-                    generate_options=True
-                )
-
-            # eval options
-
-            # cum_cum_reward += cum_reward
-            # num_of_test_samples += 1
-
-            cum_cum_reward = 0
-            print_statistics(-1, options)
-            for eval_step, box_positions in enumerate(possible_box_positions):
-                food_pos, water_pos = box_positions
-
-                mdp = envs.hungry_thirsty.HungryThirsty(side_size=6, food_position=food_pos, water_position=water_pos)
-                learner = learners.double_q_learning.QLearning(env=mdp, options=options, test_run=True)
-                _, _ = learner.learn(max_steps=TEST_MAX_STEPS_TRAIN)
-                cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
-                cum_cum_reward += cum_reward
-
-            fitness = cum_cum_reward / (eval_step + 1)
-            print_statistics(fitness, options)
-            return fitness,
-
-        fitness_fn = fitness_hungry_thirsty
-        reward_space_size = 4
+        nr_tiles = side_size * side_size
+        nr_boxes = 2
+        nr_box_states = 3
+        reward_space_size = nr_tiles * nr_boxes * nr_box_states
 
     elif env_name == "boxworld":
-        def fitness_boxes(reward_vector):
-            # init a world
-            possible_box_positions = list(itertools.combinations([
-                0,
-                SIDE_SIZE - 1,
-                (SIDE_SIZE * SIDE_SIZE) - SIDE_SIZE,
-                SIDE_SIZE * SIDE_SIZE - 1,
-            ], 2))
-            random.shuffle(possible_box_positions)
-            possible_box_positions = (p for p in possible_box_positions)
-
-            training_sample = next(possible_box_positions)
-            mdp = envs.boxes.BoxWorld(side_size=6, box_positions=training_sample)
-
-            # define reward fn
-            def intrinsic_reward_function(_mdp):
-                # thirst = _mdp._state['thirsty']
-                hunger = _mdp._state['hungry']
-
-                box1_pos, box2_pos = _mdp.box_positions
-                box1 = _mdp._state['box'][box1_pos]
-                box2 = _mdp._state['box'][box2_pos]
-                # world_states = []
-                _hack_idx = 0
-                for _box1 in envs.boxes._BoxState:
-                    for _box2 in envs.boxes._BoxState:
-                        for _hunger in (True, False):
-                            # world_states.append((box1 == _box1 and box2 == _box2 and hunger == _hunger))
-                            if box1 == _box1 and box2 == _box2 and hunger == _hunger:
-                                _idx = _hack_idx
-                            _hack_idx += 1
-
-                # x = np.array(world_states, dtype=np.int)
-                # return np.dot(reward_vector, x)
-                return reward_vector[_idx]
-
-            # generate options set
-            learner = learners.double_q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function,
-                                                           train_run=True)
-            options, cum_reward = learner.learn(steps_of_no_change=1000, max_steps=10000, generate_options=True)
-
-            if False:
-                options = pick_random_options()
-
-            # eval options
-            cum_cum_reward = 0
-            for eval_step, box_positions in enumerate(possible_box_positions):
-                mdp = envs.boxes.BoxWorld(side_size=6, box_positions=box_positions)
-                learner = learners.double_q_learning.QLearning(env=mdp, options=options, test_run=True)
-                _, _ = learner.learn(max_steps=TEST_MAX_STEPS_TRAIN, generate_options=False, plot_progress=False)
-
-                cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
-                cum_cum_reward += cum_reward
-            fitness = cum_cum_reward / eval_step
-
-            print_statistics(fitness, options)
-            return fitness
-
-        fitness_fn = fitness_boxes
-        reward_space_size = 18
+        fitness_fn = generate_boxworld_fitness_fn()
+        reward_space_size = side_size
     else:
         raise NotImplementedError("{} is not a valid environment".format(env_name))
 
+    possible_box_positions = list(
+        itertools.combinations([0, side_size - 1, (side_size * side_size) - side_size, side_size * side_size - 1, ], 2))
+
     regressor = controller.meta_controller.CMAES(
-        population_size=POPULATION_SIZE,
-        fitness_function=fitness_fn,
+        population_size=cmaes_population,
         reward_space_size=reward_space_size,
     )
-    regressor.optimize()
+    regressor.optimize(
+        experiment_id,
+        fitness_function=fitness_fn,
+        n_iterations=evolution_iters,
+        mdp_parameters={
+            'side_size': side_size,
+            'possible_box_positions': tuple(possible_box_positions),
+        },
+    )
 
 
-def print_statistics(fitness, options):
-    option_names = []
-    for option in options:
-        option_names.append(int(np.argwhere(option == -1)[0]))
-    option_names = " ".join(str(n) for n in sorted(option_names))
-    print("score:\t{}\toptions: {}\t{}".format(fitness, len(options), option_names))
+def generate_boxworld_fitness_fn():
+    def fitness_boxes(args):
+        args_dict = {k: v for k, v in args}
+        del args
+
+        reward_vector = np.array(args_dict['weights'])
+        possible_box_positions = list(args_dict['possible_box_positions'])
+
+        side_size = args_dict['side_size']
+        random.shuffle(possible_box_positions)
+        possible_box_positions = (p for p in possible_box_positions)
+
+        training_sample = next(possible_box_positions)
+        mdp = envs.boxes.BoxWorld(side_size=side_size, box_positions=training_sample)
+
+        def intrinsic_reward_function(state):
+            return reward_vector[state]
+
+        # generate options set
+        learner = learners.double_q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function,
+                                                       train_run=True)
+
+        options, cum_reward = learner.learn(max_steps=10000, generate_options=True)
+
+        # eval options
+        cum_cum_reward = 0
+        for eval_step, box_positions in enumerate(possible_box_positions):
+            mdp = envs.boxes.BoxWorld(side_size=side_size, box_positions=box_positions)
+            learner = learners.double_q_learning.QLearning(env=mdp, options=options, test_run=True)
+            _, _ = learner.learn(max_steps=eval_training_steps, generate_options=False, plot_progress=False)
+
+            cum_reward = learner.test(eval_steps=eval_test_steps)
+            cum_cum_reward += cum_reward
+        fitness = cum_cum_reward / eval_step
+
+        print_statistics(fitness, options)
+        return fitness
+
+    return fitness_boxes
+
+
+def generate_fitness_fn(
+        env_class,
+        training_steps: int,
+        eval_training_steps: int,
+        eval_test_steps: int,
+):
+    def fitness_hungry_thirsty(args):
+        args_dict = {k: v for k, v in args}
+        del args
+
+        reward_vector = np.array(args_dict['weights'])
+        possible_box_positions = list(args_dict['possible_box_positions'])
+
+        side_size = args_dict['side_size']
+        random.shuffle(possible_box_positions)
+        possible_box_positions = (p for p in possible_box_positions)
+
+        box1, box2 = next(possible_box_positions)
+        mdp = env_class(
+            side_size=side_size, box1=box1, box2=box2
+        )
+
+        def intrinsic_reward_function(state):
+            return reward_vector[state]
+
+        # learner = learners.double_q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function, train_run=True,)
+        learner = learners.q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function)
+        options, cum_reward, fitnesses = learner.learn(xs=[training_steps, ], generate_options=True)
+
+        def _load_env(params):
+            food_pos, water_pos = params
+            mdp = envs.hungry_thirsty.HungryThirsty(side_size=side_size, box2=food_pos, box1=water_pos)
+            return mdp
+
+        fitness = utils.eval_options(_load_env, options, possible_box_positions, xs=[eval_training_steps, ])
+        return fitness
+
+    return fitness_hungry_thirsty
 
 
 def pick_random_options():
@@ -195,4 +157,5 @@ def pick_random_options():
 
 
 if __name__ == "__main__":
+    gin.parse_config_file('config.gin')
     main()

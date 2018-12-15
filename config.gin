@@ -1,0 +1,8 @@
+main.experiment_id = 'generate_reward_fn'
+main.cmaes_population = 4
+main.training_steps = 10000
+main.eval_training_steps = 2000
+main.eval_test_steps = 1000
+main.side_size = 7
+main.env_name="hungry-thirsty"
+main.evolution_iters=100000

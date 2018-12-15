@@ -26,6 +26,15 @@ class DiscreteEnv(Env):
     (**) list or array of length nS
     """
 
+    def render(self, mode='human'):
+        raise NotImplementedError
+
+    def reset(self):
+        return self._reset()
+
+    def step(self, action):
+        return self._step(action)
+
     def __init__(self, number_of_states, number_of_actions, transition_matrix, initial_state_distribution):
         self.transition_matrix = transition_matrix
         self.initial_state_distribution = initial_state_distribution

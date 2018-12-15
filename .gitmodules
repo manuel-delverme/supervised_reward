@@ -1,0 +1,3 @@
+[submodule "ai-safety-gridworlds"]
+	path = ai-safety-gridworlds
+	url = https://github.com/deepmind/ai-safety-gridworlds

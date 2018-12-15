@@ -4,7 +4,6 @@ import random
 import gym.spaces
 
 
-# FUCK MY LIFE
 class HungryThirstyActions(enum.Enum):
     UP = 0
     RIGHT = 1
@@ -13,12 +12,11 @@ class HungryThirstyActions(enum.Enum):
     DRINK_WATER = 4
     EAT_FOOD = 5
 
-
 # HungryThirstyActions = OPEN_BOX = 4
 
 
 class HungryThirsty(envs.gridworld.GridWorld):
-    def __init__(self, side_size, water_position=0, food_position=5):
+    def __init__(self, side_size, box1=0, box2=5):
         self._state = {
             'hungry': True,
             'thirsty': True,
@@ -36,7 +34,7 @@ class HungryThirsty(envs.gridworld.GridWorld):
             base_transition_probability=0.9,
         )
         extra_dof = len(self._state) * 2
-        self.water_position, self.food_position = water_position, food_position
+        self.water_position, self.food_position = box1, box2
         self.observation_space = gym.spaces.Discrete(self.observation_space.n * extra_dof)
         self.action_space = gym.spaces.Discrete(self.action_space.n + len(self._state))
 
@@ -87,25 +85,33 @@ class HungryThirsty(envs.gridworld.GridWorld):
         state_hash += self._state['thirsty'] * self.number_of_tiles * 2
         return state_hash  # state.State(state_hash=state_hash, state_info=self._state.copy())
 
-    def show_board(self, some_matrix=None, close=False, policy=None, highlight_square=None):
+    def show_board(self, some_matrix=None, close=False, policy=None, highlight_square=None, info={}, option_vec=(),
+                   highlight_squares=(), state_offset=None):
         if close:
             return
         if self.gui is None:
             self.gui = envs.gui.GUI(self.width)
-        info = self._state.copy()
+        info.update({
+            'hungry': self._state['hungry'],
+            'thirsty': self._state['thirsty'],
+        })
+        action_names = [o.index(-1) for o in option_vec]
+        if state_offset is None:
+            state_offset = self.number_of_tiles * (self._hash_state() // self.number_of_tiles)
+
         self.gui.render_board(
             player_position=self.agent_position_idx,
             terminal_states=self.terminal_positions,
             water_position=self.water_position,
             food_position=self.food_position,
             walls=self._walls,
-            thirsty=False,  # there is no thirsty in boxes
-            hungry=True,
             some_matrix=some_matrix,
             policy=policy,
             highlight_square=highlight_square,
+            highlight_squares=highlight_squares,
             info=info,
-            state_offset=self.num_tiles * (self._hash_state() // self.num_tiles)
+            state_offset=state_offset,
+            action_names=action_names,
         )
 
     def force_state(self, state):

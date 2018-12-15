@@ -1,5 +1,6 @@
 import pprint
 import pygame
+import math
 
 
 class GUI(object):
@@ -50,6 +51,7 @@ class GUI(object):
     }
 
     def __init__(self, width, tile_size=80):
+        import pygame
         self.tile_size = tile_size
         self.width = width
         self.height = width
@@ -69,7 +71,8 @@ class GUI(object):
     def render_board(
             self, player_position=None, terminal_states=(), some_matrix=None, policy=None, goals=None,
             walls={}, boxes={}, hungry=False, thirsty=False, state_offset=None,
-            highlight_square=None, info=False, water_position=None, food_position=False,
+            highlight_square=None, info=False, water_position=None, food_position=None, just_numbers=True,
+            action_names=(), highlight_squares=(),
     ):
         COLOR_BLUE = (0, 0, 255)
         COLOR_GREEN = (0, 255, 0)
@@ -95,17 +98,24 @@ class GUI(object):
             state_hash = tile_idx + slice_start
             x = tile_idx % self.width
             y = tile_idx // self.width
-            icon_x = x * self.tile_size + 10
+            icon_x = x * self.tile_size  # + 10
             icon_y = y * self.tile_size
 
             policy_position = (icon_x, icon_y + self.tile_size / 2)
+
+            if tile_idx in walls:
+                pygame.draw.rect(self.screen, COLOR_BLACK, [icon_x, icon_y, self.tile_size, self.tile_size])
 
             if policy is not None:
                 policy_act = policy[state_hash]
                 try:
                     policy_icon = self.icon[policy_act]
                 except KeyError:
-                    self.icon[policy_act] = policy_font.render(str(policy_act), 1, COLOR_GREEN)
+                    try:
+                        text = str(action_names[policy_act - 4])
+                    except IndexError:
+                        text = str(policy_act)
+                    self.icon[policy_act] = policy_font.render(text, 1, COLOR_GREEN)
                     policy_icon = self.icon[policy_act]
                 self.screen.blit(policy_icon, policy_position)
 
@@ -135,33 +145,23 @@ class GUI(object):
             if highlight_square is not None and highlight_square % num_of_tiles == tile_idx:
                 pygame.draw.rect(self.screen, COLOR_YELLOW, [icon_x, icon_y, self.tile_size, self.tile_size])
 
+            if highlight_squares is not None and tile_idx in highlight_squares:
+                pygame.draw.rect(self.screen, COLOR_GREEN, [icon_x, icon_y, self.tile_size, self.tile_size])
+
             if square_icon:
                 self.screen.blit(square_icon, (icon_x, icon_y))
-
-            try:
-                tile_walls = walls[tile_idx]
-            except KeyError:
-                pass
-            else:
-                if tile_idx + 1 in tile_walls:
-                    pygame.draw.rect(self.screen, COLOR_YELLOW,
-                                     [icon_x + self.tile_size - 10, icon_y, 10, self.tile_size])
-                if tile_idx - 1 in tile_walls:
-                    pygame.draw.rect(self.screen, COLOR_RED, [icon_x, icon_y, 10, self.tile_size])
-                if tile_idx + 6 in tile_walls:
-                    pygame.draw.rect(self.screen, COLOR_GREEN,
-                                     [icon_x, icon_y + self.tile_size - 10, self.tile_size, 10])
-                if tile_idx - 6 in tile_walls:
-                    pygame.draw.rect(self.screen, (0, 0, 255), [icon_x, icon_y, self.tile_size, 10])
 
             if some_matrix is not None:
                 value = 0
                 for offset in range(0, some_matrix.shape[0] // num_of_tiles):
                     value_idx = tile_idx + offset * num_of_tiles
                     value += some_matrix[value_idx]
-                    # value = "{1}[{0}]".format(value_idx, value)
 
-                value = str(round(value / (some_matrix.shape[0] // num_of_tiles), 2))
+                val = round(value / (some_matrix.shape[0] // num_of_tiles), 2)
+                if val > 99:
+                    value = "1e" + str(round(math.log10(val), 2))
+                else:
+                    value = str(val)
 
                 if value_idx == state_hash:
                     text = font.render(value, 2, COLOR_RED)
@@ -176,24 +176,30 @@ class GUI(object):
                 self.screen.blit(text,
                                  (icon_x - 5 + self.tile_size / 2 * offset_x, int(icon_y + self.tile_size * 3 / 4)))
 
-            black = (0, 0, 0)
             for offset in range(0, 2):
                 value_idx = str(tile_idx + offset * num_of_tiles)
                 if value_idx == state_hash:
                     text = font.render(value_idx, 2, COLOR_RED)
                 else:
-                    text = font.render(value_idx, 2, black)
-                self.screen.blit(text, (icon_x, icon_y + offset * 10))
+                    text = font.render(value_idx, 2, COLOR_BLACK)
+                if just_numbers:
+                    text = policy_font.render(value_idx, 2, COLOR_BLACK)
+                    self.screen.blit(text, (icon_x, icon_y + offset * 10))
+                    break
+                else:
+                    self.screen.blit(text, (icon_x, icon_y + offset * 10))
             for offset in range(2, 4):
+                if just_numbers:
+                    break
                 value_idx = str(tile_idx + offset * num_of_tiles)
                 if value_idx == state_hash:
                     text = font.render(value_idx, 2, COLOR_RED)
                 else:
-                    text = font.render(value_idx, 2, black)
+                    text = font.render(value_idx, 2, COLOR_BLACK)
                 self.screen.blit(text, (icon_x + self.tile_size / 2, icon_y + (offset - 2) * 10))
 
         if info:
-            for idx, row in enumerate(pprint.pformat(info, width=60).split("\n")):
+            for idx, row in enumerate(pprint.pformat(info, width=50).split("\n")):
                 offset = idx * 20
                 text = font.render(row, 2, COLOR_BLACK)
                 self.screen.blit(text, (0, self.display_height + 10 + offset))
