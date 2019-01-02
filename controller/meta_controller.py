@@ -1,4 +1,5 @@
 import numpy as np
+import shutil
 import os
 import tqdm
 import tensorboardX
@@ -20,7 +21,12 @@ class CMAES(object):
         )
 
     def optimize(self, experiment_id, fitness_function, n_iterations, mdp_parameters):
-        with tensorboardX.SummaryWriter(os.path.join('runs', experiment_id), flush_secs=5) as summary_writer:
+        log_dir = os.path.join('runs', experiment_id)
+        try:
+            shutil.rmtree(log_dir, ignore_errors=False)
+        except FileNotFoundError:
+            pass
+        with tensorboardX.SummaryWriter(log_dir, flush_secs=5) as summary_writer:
             layout = {
                 'best': {'optimization': ['Multiline', ['optimization/baseline', 'optimization/best']]},
                 'mean': {'optimization': ['Multiline', ['optimization/baseline', 'optimization/mean']]},

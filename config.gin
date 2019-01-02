@@ -1,4 +1,4 @@
-main.experiment_id = 'intrinsic only'
+main.experiment_id = 'generate_on_rw'
 main.cmaes_population = 15
 main.training_steps = 10000
 main.eval_training_steps = 2000
@@ -6,3 +6,5 @@ main.eval_test_steps = 1000
 main.side_size = 7
 main.env_name = "hungry-thirsty"
 main.evolution_iters = 100000
+learn.replace_reward = False
+learn.generate_on_rw = True

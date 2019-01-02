@@ -59,7 +59,8 @@ class QLearning(object):
 
         return action_idx, primitive_action_idx
 
-    def learn(self, generate_options=False, plot_every=None, xs=None, plot_progress=False):
+    @gin.configurable
+    def learn(self, generate_options=False, plot_every=None, xs=None, replace_reward=True, generate_on_rw=False, plot_progress=False):
         xs = set(xs)
 
         cumulative_reward = 0
@@ -76,6 +77,7 @@ class QLearning(object):
         fitnesses = []
 
         terminal = False
+        reward = None
 
         for step in range(max(xs)):
             if plot_every is not None and step % plot_every == 0:
@@ -89,12 +91,15 @@ class QLearning(object):
 
             if primitive_action != TERMINATE_OPTION:
                 new_state, reward, terminal, info = self.environment.step(self.available_actions[primitive_action])
+                if reward > 0:
+                    fitness += 1
                 if self.surrogate_reward is not None:
-                    reward = self.surrogate_reward(new_state)
-                    terminal = reward > 0
-                else:
-                    if reward > 0:
-                        fitness += 1
+                    if replace_reward:
+                        reward = self.surrogate_reward(new_state)
+                        terminal = reward > 0
+                    else:
+                        terminal = reward > 0
+                        reward += self.surrogate_reward(new_state)
                 cumulative_reward += reward
 
             future_value = self.qmax[new_state]
@@ -139,7 +144,12 @@ class QLearning(object):
                 self.qargmax[old_state] = arg_max
                 self.qmax[old_state] = self.Q[old_state][arg_max]
 
-            if generate_options and delta_Q > 0 and self.environment.agent_position_idx not in option_goals:
+            if generate_on_rw:
+                option_gen_metric = reward
+            else:
+                option_gen_metric = delta_Q
+
+            if generate_options and option_gen_metric > 0 and self.environment.agent_position_idx not in option_goals:
                 # reward = self.surrogate_reward(self.environment)
                 # goal = self.environment.agent_position_idx
                 option_goals.add(self.generate_option(old_state))
@@ -229,47 +239,6 @@ def is_terminate_option(skill, old_state):
     return skill[old_state] == -1
 
 
-def main():
-    import os
-    os.chdir("../")
-    TEST_MAX_STEPS_EVAL = 1000
-    box_positions = (0, 30)
-
-    import envs.simple_boxes
-    import learners.DISABLED_double_q
-    token_mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=(1, 2))
-    learner = learners.DISABLED_double_q.QLearning(env=token_mdp, options=[], test_run=True)
-    token_mdp.agent_position_idx = 0
-    learner.generate_option()
-    option_vec0 = tuple(learner.available_actions[-1])
-    token_mdp.agent_position_idx = 17
-    learner.generate_option()
-    option_vec1 = tuple(learner.available_actions[-1])
-
-    option_vec = [option_vec0, option_vec1]
-
-    mdp = envs.simple_boxes.BoxWorldSimple(side_size=6, box_positions=box_positions)
-    learner = QLearning(env=mdp, options=option_vec)
-
-    training_time = 0
-    testing_time = 0
-    for it in range(10):
-        print(it)
-        learner = QLearning(env=mdp, options=option_vec, test_run=False)
-        time0 = time.time()
-        learner.learn(xs=[10000,] , plot_speed=True)
-        diff = (time.time() - time0)
-        training_time += diff
-
-        time0 = time.time()
-        cum_reward = learner.test(eval_steps=TEST_MAX_STEPS_EVAL)
-        diff = (time.time() - time0)
-        testing_time += diff
-        # cum_cum_reward += cum_reward
-    print("training_time", training_time, "testing_time", testing_time, "train/test",
-          float(training_time) / testing_time)
-
-
 @disk_utils.disk_cache
 # @gin.configurable
 def learn_option(goal, mdp, training_steps=100000):
@@ -304,7 +273,3 @@ def learn_option(goal, mdp, training_steps=100000):
     )
     # time.sleep(1000)
     return option
-
-
-if __name__ == "__main__":
-    main()
