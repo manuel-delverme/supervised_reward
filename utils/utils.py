@@ -11,7 +11,7 @@ def eval_options(load_env, options, possible_box_positions, xs):
     return cum_cum_reward / (eval_step + 1)
 
 
-# @disk_utils.disk_cache
+@disk_utils.disk_cache
 def eval_option_on_mdp(load_fn, box_positions, option_vec, xs):
     mdp = load_fn(box_positions)
     learner = learners.q_learning.QLearning(env=mdp, options=option_vec)

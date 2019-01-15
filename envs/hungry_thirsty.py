@@ -2,6 +2,7 @@ import enum
 import envs.gridworld
 import random
 import gym.spaces
+import numpy as np
 
 
 class HungryThirstyActions(enum.Enum):
@@ -12,8 +13,6 @@ class HungryThirstyActions(enum.Enum):
     DRINK_WATER = 4
     EAT_FOOD = 5
 
-# HungryThirstyActions = OPEN_BOX = 4
-
 
 class HungryThirsty(envs.gridworld.GridWorld):
     def __init__(self, side_size, box1=0, box2=5):
@@ -21,13 +20,6 @@ class HungryThirsty(envs.gridworld.GridWorld):
             'hungry': True,
             'thirsty': True,
         }
-        # action_size = 6
-        # state_size = board_size * 2 * len(self._state)
-        # for action in new_actions:
-        #     # overwrite actions
-        #     # transition[position_idx][Actions.OPEN_BOX] = [(1.0, position_idx, reward, False)]
-        #     transition[position_idx][Actions.EAT_FOOD] = [(1.0, position_idx, reward, False)]
-        #     transition[position_idx][Actions.DRINK_WATER] = [(1.0, position_idx, reward, False)]
         super(HungryThirsty, self).__init__(
             side_size=side_size,
             terminal_states=(),
@@ -59,18 +51,6 @@ class HungryThirsty(envs.gridworld.GridWorld):
         if not self._state['hungry']:
             reward = 100
             self._state['thirsty'] = True
-
-        # else:
-        #     reward += -1
-
-        # if not self._state['thirsty']:
-        #     reward += 0.1
-        # else:
-        #     reward += -1
-
-        # if random.random() < 0.001:
-        #     self._state['thirsty'] = True
-
         return state_obj, reward, terminal, info
 
     def _reset(self):
@@ -135,39 +115,13 @@ class HungryThirsty(envs.gridworld.GridWorld):
             state_dict['hungry'] = False
         return state_hash, state_dict
 
-    def __repr__(self):
-        # TODO: dirrrty
-        return "<BoxWorld instance>"
-
-    def __str__(self):
-        # TODO: dirrrty
-        return "<BoxWorld instance>"
-
-
-if __name__ == "__main__":
-    import time
-
-    test_world = HungryThirsty(side_size=6, )
-    test_world.reset()
-    test_world.render()
-    time.sleep(0.2)
-    test_world.teleport_agent(0)
-    test_world.render()
-    time.sleep(0.2)
-    sequence = [envs.gridworld.GridWorldActions.DOWN] * 6 + \
-               [envs.gridworld.GridWorldActions.RIGHT] * 6 + \
-               [envs.gridworld.GridWorldActions.UP] * 6 + \
-               [envs.gridworld.GridWorldActions.LEFT] * 6 + \
-               [envs.gridworld.GridWorldActions.EAT_FOOD] * 6 + \
-               [envs.gridworld.GridWorldActions.DRINK_WATER] * 6
-
-    period = 1 / 60
-    for action in sequence:
-        test_world.step(action)
-        test_world.render()
-        time.sleep(period)
-    while True:
-        action = random.choice(list(envs.gridworld.GridWorldActions))
-        test_world.step(action)
-        test_world.render()
-        time.sleep(period)
+    def render(self, mode='human'):
+        if mode == 'ascii':
+            board = np.zeros((self.height, self.width))
+            y, x = divmod(self.agent_position_idx, self.height)
+            board[y, x] = 1
+            for w in self._walls:
+                board[divmod(w, self.height)] = 255
+            return board
+        else:
+            super(HungryThirsty, self).render(mode)

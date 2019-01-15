@@ -6,6 +6,7 @@ import envs.gui
 import enum
 
 
+
 class GridWorldActions(enum.Enum):
     UP = 0
     RIGHT = 1

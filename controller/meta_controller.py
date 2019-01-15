@@ -12,7 +12,7 @@ class CMAES(object):
         self.population_size = population_size
         self.reward_space_size = reward_space_size
         self.solver = cma.CMAEvolutionStrategy(
-            x0=reward_space_size * [-5.0],
+            x0=reward_space_size * [-2.0],
             sigma0=0.5,
             inopts={
                 'popsize': population_size,
@@ -28,44 +28,51 @@ class CMAES(object):
             pass
         with tensorboardX.SummaryWriter(log_dir, flush_secs=5) as summary_writer:
             layout = {
-                'best': {'optimization': ['Multiline', ['optimization/baseline', 'optimization/best']]},
-                'mean': {'optimization': ['Multiline', ['optimization/baseline', 'optimization/mean']]},
+                'best': {'optimization': ['Multiline',
+                                          ['optimization/baseline', 'optimization/best', 'optimization/random_best']]},
+                'mean': {'optimization': ['Multiline',
+                                          ['optimization/baseline', 'optimization/mean', 'optimization/random_mean']]},
             }
             summary_writer.add_custom_scalars(layout)
 
             side_size = mdp_parameters['side_size']
             old_fbest = 0
+            random_best = 0.0
+            old_random_best = -1.0
             baseline, _ = fitness_function((frozenset({'weights': None, **mdp_parameters}.items())))
 
-            for optimization_iteration in tqdm.tqdm(range(n_iterations), desc="otimization"):
+            for optimization_iteration in tqdm.tqdm(range(n_iterations), desc="optimization"):
+
                 solutions = self.solver.ask(number=self.population_size)
+                fitness_list, options = self.eval_solutions(fitness_function, mdp_parameters, solutions)
+                self.solver.tell(solutions, -fitness_list, copy=True)
 
-                args = []
-                for s in solutions:
-                    args.append(frozenset({'weights': tuple(s), **mdp_parameters}.items()))
+                random_solutions = np.random.randn(self.population_size, self.reward_space_size) - 2
+                random_fitness_list, random_options = self.eval_solutions(fitness_function, mdp_parameters,
+                                                                          random_solutions)
 
-                # result = pool.map(fitness_function, args)
-                result = map(fitness_function, args)
+                xbest = self.solver.result.xbest
+                fbest = self.solver.result.fbest
 
-                fitness_list, options = list(zip(*result))
-                fitness_list = np.array(fitness_list)
-
-                assert not np.isnan(np.min(fitness_list))
-                costs = [-f for f in fitness_list]
-                self.solver.tell(solutions, costs)
-
-                fitness_list = np.array(fitness_list)
+                random_best = max(random_best, float(random_fitness_list.max()))
+                assert random_best >= old_random_best
+                old_random_best = random_best
 
                 summary_writer.add_scalar('optimization/mean', fitness_list.mean(), optimization_iteration)
                 summary_writer.add_scalar('optimization/min', fitness_list.min(), optimization_iteration)
                 summary_writer.add_scalar('optimization/max', fitness_list.max(), optimization_iteration)
                 summary_writer.add_scalar('optimization/var', fitness_list.var(), optimization_iteration)
                 summary_writer.add_scalar('optimization/best', -self.solver.result.fbest, optimization_iteration)
-                summary_writer.add_scalar('optimization/baseline', baseline, optimization_iteration)
                 summary_writer.add_histogram('optimization/sigmas', self.solver.sm.variances, optimization_iteration)
 
-                xbest = self.solver.result.xbest
-                fbest = self.solver.result.fbest
+                summary_writer.add_scalar('optimization/random_mean', random_fitness_list.mean(),
+                                          optimization_iteration)
+                summary_writer.add_scalar('optimization/random_min', random_fitness_list.min(), optimization_iteration)
+                summary_writer.add_scalar('optimization/random_max', random_fitness_list.max(), optimization_iteration)
+                summary_writer.add_scalar('optimization/random_var', random_fitness_list.var(), optimization_iteration)
+                summary_writer.add_scalar('optimization/random_best', random_best, optimization_iteration)
+
+                summary_writer.add_scalar('optimization/baseline', baseline, optimization_iteration)
 
                 if old_fbest != fbest:
                     old_fbest = fbest
@@ -93,3 +100,15 @@ class CMAES(object):
                     summary_writer.add_figure('best_options', fig, optimization_iteration)
 
         return self.solver.result.xbest, None
+
+    def eval_solutions(self, fitness_function, mdp_parameters, solutions):
+        args = []
+        for s in solutions:
+            args.append(frozenset({'weights': tuple(s), **mdp_parameters}.items()))
+        # result = pool.map(fitness_function, args)
+        result = map(fitness_function, args)
+        fitness_list, options = list(zip(*result))
+        fitness_list = np.array(fitness_list)
+        assert not np.isnan(np.min(fitness_list))
+        fitness_list = np.array(fitness_list)
+        return fitness_list, options

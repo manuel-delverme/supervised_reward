@@ -22,13 +22,8 @@ def main(experiment_id, cmaes_population, training_steps, eval_training_steps, e
         )
 
         nr_tiles = side_size * side_size
-        nr_boxes = 2
-        nr_box_states = 3
-        reward_space_size = nr_tiles * nr_boxes * nr_box_states
-
-    elif env_name == "boxworld":
-        fitness_fn = generate_boxworld_fitness_fn()
-        reward_space_size = side_size
+        nr_agent_states = 4  # None, Hungry, Thristy, Hungry+Thristy
+        reward_space_size = nr_tiles * nr_agent_states
     else:
         raise NotImplementedError("{} is not a valid environment".format(env_name))
 
@@ -106,23 +101,26 @@ def generate_fitness_fn(
 
         side_size = args_dict['side_size']
         random.shuffle(possible_box_positions)
+
+        # to generator
         possible_box_positions = (p for p in possible_box_positions)
 
+        # draw training environment
         box1, box2 = next(possible_box_positions)
-        mdp = env_class(
-            side_size=side_size, box1=box1, box2=box2
-        )
+        mdp = env_class(side_size=side_size, box1=box1, box2=box2)
 
         if reward_vector is None:
             intrinsic_reward_function = None
+            generate_options = False
         else:
             reward_vector = np.array(reward_vector)
+            generate_options = True
 
             def intrinsic_reward_function(state):
                 return reward_vector[state]
 
         learner = learners.q_learning.QLearning(env=mdp, surrogate_reward=intrinsic_reward_function)
-        options, cum_reward, fitnesses = learner.learn(xs=[training_steps, ], generate_options=True)
+        options, cum_reward, fitnesses = learner.learn(xs=[training_steps, ], generate_options=generate_options)
 
         def _load_env(params):
             food_pos, water_pos = params

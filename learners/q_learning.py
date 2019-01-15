@@ -262,14 +262,7 @@ def learn_option(goal, mdp, training_steps=100000):
     except IndexError as e:
         pass
 
-    # mdp.show_board(
-    #     some_matrix=np.max(learner.Q, axis=1),
-    #     # some_matrix=value,
-    #     policy=np.array(option),
-    # )
-    # input("done")
     option = np.tile(
         option, mdp.observation_space.n // mdp.number_of_tiles
     )
-    # time.sleep(1000)
     return option
