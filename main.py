@@ -1,4 +1,5 @@
 import itertools
+from typing import Callable
 from utils import utils
 import random
 import numpy as np
