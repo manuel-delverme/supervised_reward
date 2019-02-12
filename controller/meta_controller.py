@@ -1,31 +1,59 @@
-import numpy as np
-import shutil
-import os
-import tqdm
-import tensorboardX
+import operator
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import cma
+import os
+import time
+
+import deap.algorithms
+import deap.base
+import deap.creator
+import deap.gp
+import deap.tools
+import numpy as np
+import pathos.multiprocessing as multiprocessing
+import tensorboardX
+import tqdm
 
 
-class CMAES(object):
+class GeneticEvolution(object):
     def __init__(self, reward_space_size, population_size):
         self.population_size = population_size
         self.reward_space_size = reward_space_size
-        self.solver = cma.CMAEvolutionStrategy(
-            x0=reward_space_size * [-2.0],
-            sigma0=0.5,
-            inopts={
-                'popsize': population_size,
-                'minstd': 0.15,
-            }
-        )
+
+        deap.creator.create('FitnessMax', deap.base.Fitness, weights=(1.0,))
+        deap.creator.create('Individual', list, fitness=deap.creator.FitnessMax, statistics=dict)
+
+        self._toolbox = deap.base.Toolbox()
+        # self._toolbox.register('expr', self._gen_grow_safe, pset=self._pset, min_=1, max_=3)
+        # self._toolbox.register('individual', , deap.creator.Individual, self._toolbox.expr)
+        # self._toolbox.register('compile', self._compile_to_sklearn)
+        self._toolbox.register('mate', deap.tools.cxTwoPoint)
+        # self._toolbox.register('expr_mut', self._gen_grow_safe, min_=1, max_=4)
+        # self._toolbox.register('mutate', deap.tools.mutGaussian, mu=0.0, sigma=4.0, indpb=0.2)
+        self._toolbox.register('mutate', deap.tools.mutShuffleIndexes, indpb=0.2)
+
+        pool = multiprocessing.Pool()
+        self._toolbox.register("map", pool.map)
+
+        self._toolbox.register("attr_init", lambda: (np.random.randn() - 2))
+        self._toolbox.register("individual", deap.tools.initRepeat, deap.creator.Individual, self._toolbox.attr_init,
+                               n=reward_space_size)
+        self._toolbox.register("select", deap.tools.selBest, k=3)
+        self._toolbox.register('population', deap.tools.initRepeat, list, self._toolbox.individual)
+        self.statistics = deap.tools.Statistics(key=operator.attrgetter("fitness.values"))
+
+        self.statistics.register("max", np.max)
+        self.statistics.register("mean", np.mean)
+        self.statistics.register("min", np.min)
+        self.statistics.register("std", np.std)
 
     def optimize(self, experiment_id, fitness_function, n_iterations, mdp_parameters):
-        log_dir = os.path.join('runs', experiment_id)
-        try:
-            shutil.rmtree(log_dir, ignore_errors=False)
-        except FileNotFoundError:
-            pass
+        self._toolbox.register("evaluate", fitness_function)
+        hall_of_fame = deap.tools.HallOfFame(maxsize=10)
+
+        log_dir = os.path.join('runs', experiment_id, time.strftime("%Y_%m_%d-%H_%M_%S"))
+
         with tensorboardX.SummaryWriter(log_dir, flush_secs=5) as summary_writer:
             layout = {
                 'best': {'optimization': ['Multiline',
@@ -35,35 +63,62 @@ class CMAES(object):
             }
             summary_writer.add_custom_scalars(layout)
 
-            side_size = mdp_parameters['side_size']
             old_fbest = 0
             random_best = 0.0
             old_random_best = -1.0
-            baseline, _ = fitness_function((frozenset({'weights': None, **mdp_parameters}.items())))
+            baseline, _ = fitness_function(None)
+
+            cxpb, mutpb = 0.5, 0.2
+            population = self._toolbox.population(n=self.population_size)
+            # _ = fitness_function(population[0])
+            fitness_list = self._toolbox.map(self._toolbox.evaluate, population)
+            for ind, fit in zip(population, fitness_list):
+                ind.fitness.values = (fit[0], )
+                ind.statistics['options'] = fit[1]
 
             for optimization_iteration in tqdm.tqdm(range(n_iterations), desc="optimization"):
 
-                solutions = self.solver.ask(number=self.population_size)
-                fitness_list, options = self.eval_solutions(fitness_function, mdp_parameters, solutions)
-                self.solver.tell(solutions, -fitness_list, copy=True)
+                # solutions = self.solver.ask(number=self.population_size)
+                selected_solutions = self._toolbox.select(population, k=len(population))
+                population = deap.algorithms.varAnd(selected_solutions, self._toolbox, cxpb, mutpb)
+
+                # fitness_list, options = self.eval_solutions(fitness_function, mdp_parameters, solutions)
+
+                # udpate the new mutated individuals
+                invalids = [ind for ind in population if not ind.fitness.valid]
+                fitness_list = list(self._toolbox.map(self._toolbox.evaluate, invalids))
+
+                # self.solver.tell(solutions, -fitness_list, copy=True)
+                for ind, fit in zip(invalids, fitness_list):
+                    ind.fitness.values = (fit[0],)
+                    ind.statistics['options'] = fit[1]
+
+                hall_of_fame.update(population)
 
                 random_solutions = np.random.randn(self.population_size, self.reward_space_size) - 2
                 random_fitness_list, random_options = self.eval_solutions(fitness_function, mdp_parameters,
                                                                           random_solutions)
 
-                xbest = self.solver.result.xbest
-                fbest = self.solver.result.fbest
+                # xbest = self.solver.result.xbest
+                # fbest = self.solver.result.fbest
+
+                # xbest = np.array(list(hall_of_fame[0]))
+                best_element = hall_of_fame[0]
+                fbest = best_element.fitness.values[0]
+                best_options = best_element.statistics['options']
 
                 random_best = max(random_best, float(random_fitness_list.max()))
                 assert random_best >= old_random_best
                 old_random_best = random_best
 
-                summary_writer.add_scalar('optimization/mean', fitness_list.mean(), optimization_iteration)
-                summary_writer.add_scalar('optimization/min', fitness_list.min(), optimization_iteration)
-                summary_writer.add_scalar('optimization/max', fitness_list.max(), optimization_iteration)
-                summary_writer.add_scalar('optimization/var', fitness_list.var(), optimization_iteration)
-                summary_writer.add_scalar('optimization/best', -self.solver.result.fbest, optimization_iteration)
-                summary_writer.add_histogram('optimization/sigmas', self.solver.sm.variances, optimization_iteration)
+                stats = self.statistics.compile(population)
+
+                summary_writer.add_scalar('optimization/mean', stats['mean'], optimization_iteration)
+                summary_writer.add_scalar('optimization/min', stats['min'], optimization_iteration)
+                summary_writer.add_scalar('optimization/max', stats['max'], optimization_iteration)
+                summary_writer.add_scalar('optimization/std', stats['std'], optimization_iteration)
+                summary_writer.add_scalar('optimization/best', fbest, optimization_iteration)
+                # summary_writer.add_histogram('optimization/sigmas', self.solver.sm.variances, optimization_iteration)
 
                 summary_writer.add_scalar('optimization/random_mean', random_fitness_list.mean(),
                                           optimization_iteration)
@@ -76,7 +131,8 @@ class CMAES(object):
 
                 if old_fbest != fbest:
                     old_fbest = fbest
-                    for idx, values in enumerate(xbest.reshape(-1, side_size * side_size)):
+                    side_size = 7
+                    for idx, values in enumerate(np.array(best_element).reshape(-1, side_size * side_size)):
                         value_map = values.reshape(side_size, side_size)
                         fig = plt.figure()
                         ax = fig.add_subplot(111)
@@ -84,7 +140,7 @@ class CMAES(object):
                         fig.colorbar(cax)
                         summary_writer.add_figure('best_weights{}'.format(idx), fig, optimization_iteration)
 
-                    opts = options[np.argwhere(fitness_list == -fbest)[0][0]]
+                    opts = best_options[np.argwhere(fitness_list == -fbest)[0][0]]
                     opt_map = np.zeros((side_size, side_size))
                     for opt in opts:
                         for idx, action in enumerate(opt):
@@ -99,12 +155,12 @@ class CMAES(object):
                     fig.colorbar(cax)
                     summary_writer.add_figure('best_options', fig, optimization_iteration)
 
-        return self.solver.result.xbest, None
+        return None, None
 
     def eval_solutions(self, fitness_function, mdp_parameters, solutions):
         args = []
         for s in solutions:
-            args.append(frozenset({'weights': tuple(s), **mdp_parameters}.items()))
+            args.append(s)
         # result = pool.map(fitness_function, args)
         result = map(fitness_function, args)
         fitness_list, options = list(zip(*result))

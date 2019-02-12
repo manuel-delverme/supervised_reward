@@ -15,7 +15,7 @@ class HungryThirstyActions(enum.Enum):
 
 
 class HungryThirsty(envs.gridworld.GridWorld):
-    def __init__(self, side_size, box1=0, box2=5):
+    def __init__(self, box1, box2, side_size):
         self._state = {
             'hungry': True,
             'thirsty': True,
