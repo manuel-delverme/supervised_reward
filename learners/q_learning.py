@@ -78,11 +78,9 @@ class QLearning(object):
 
         terminal = False
         reward = None
+        render_one = False
 
         for step in range(max(xs)):
-            if plot_every is not None and step % plot_every == 0:
-                self.render_board(render=2, info={'step': step}, highlight_square=self.goal)
-
             action_idx, primitive_action = self.pick_action(old_state, old_action_idx=action_idx,
                                                             old_primitive_action=primitive_action)
 
@@ -104,10 +102,19 @@ class QLearning(object):
 
             future_value = self.qmax[new_state]
 
+            if plot_every is not None and step % plot_every == 0 and step > 0:
+                render_one = True
+
             if terminal:
                 self.environment.reset()
                 if self.is_option(action_idx):
                     primitive_action = TERMINATE_OPTION
+
+                if render_one:
+                    # self.render_board(render=2, info={'step': step}, highlight_square=self.goal)
+                    print('rendering at', step)
+                    self.test(eval_steps=200, render=True)
+                    render_one = False
 
             if primitive_action == TERMINATE_OPTION:
                 time_difference = time_steps_under_option
@@ -184,7 +191,7 @@ class QLearning(object):
         primitive_action_idx = None
         action_idx = None
 
-        for tile_idx in range(self.environment.number_of_tiles):
+        for tile_idx in range(1 if render else 100):
             old_state = self.environment.reset()
             # self.environment.teleport_agent(tile_idx)
 
@@ -205,15 +212,14 @@ class QLearning(object):
                     self.environment.reset()
 
                 if render:
-                    if action_idx > 3:
+                    if action_idx > self.environment.action_space.n:
                         goal = self.available_actions[action_idx].index(-1)
                     else:
                         goal = None
                     self.render_board(render=2, info={'reward': cumulative_reward}, highlight_square=goal)
 
                 old_state = new_state
-        # return cumulative_reward / self.environment.number_of_tiles
-        return fitness / self.environment.number_of_tiles
+        return fitness / 100
 
     def is_option(self, action):
         # return action is not None and not isinstance(action, int) and not isinstance(action, np.int64)
@@ -241,7 +247,7 @@ def is_terminate_option(skill, old_state):
 
 @disk_utils.disk_cache
 # @gin.configurable
-def learn_option(goal, mdp, training_steps=100000):
+def learn_option(goal, mdp, training_steps=10000): # reduced for 7x7
     print("generating policy for goal:{}".format(goal))
 
     def surrogate_reward(state):
@@ -251,18 +257,21 @@ def learn_option(goal, mdp, training_steps=100000):
             return -1
 
     learner = QLearning(env=mdp, options=None, surrogate_reward=surrogate_reward, goal=goal)
-    _, _, fitnesses = learner.learn(xs=[training_steps, ], plot_every=None) # training_steps//10)
+    _, _, fitnesses = learner.learn(xs=[training_steps, ], plot_every=None) # plot_every=training_steps//5)
     option = np.argmax(learner.Q, axis=1)
 
-    state_idx = goal
-    try:
-        while True:
-            option[state_idx] = -1
-            state_idx += mdp.number_of_tiles
-    except IndexError as e:
-        pass
+    if hasattr(mdp, 'number_of_tiles'):
+        state_idx = goal
+        try:
+            while True:
+                option[state_idx] = -1
+                state_idx += mdp.number_of_tiles
+        except IndexError as e:
+            pass
 
-    option = np.tile(
-        option, mdp.observation_space.n // mdp.number_of_tiles
-    )
+        option = np.tile(
+            option, mdp.observation_space.n // mdp.number_of_tiles
+        )
+    else:
+        option[goal] = -1
     return option

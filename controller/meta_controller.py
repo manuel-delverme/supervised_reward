@@ -70,7 +70,7 @@ class GeneticEvolution(object):
 
             cxpb, mutpb = 0.5, 0.2
             population = self._toolbox.population(n=self.population_size)
-            # _ = fitness_function(population[0])
+            _ = fitness_function(population[0])
             fitness_list = self._toolbox.map(self._toolbox.evaluate, population)
             for ind, fit in zip(population, fitness_list):
                 ind.fitness.values = (fit[0], )

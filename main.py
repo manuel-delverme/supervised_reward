@@ -6,7 +6,7 @@ import random
 import numpy as np
 import controller.meta_controller
 import envs.boxes
-import envs.gridworld
+import envs.minigrid
 import envs.hungry_thirsty
 import learners.q_learning
 import gin
@@ -41,6 +41,17 @@ def main(experiment_id, population, training_steps, eval_training_steps, eval_te
             eval_test_steps=eval_test_steps,
             training_steps=training_steps,
             possible_box_positions=possible_box_positions,
+        )
+        nr_tiles = side_size * side_size
+        nr_agent_states = 4  # None, Hungry, Thristy, Hungry+Thristy
+        reward_space_size = nr_tiles * nr_agent_states
+    elif env_name == "minigrid":
+        fitness_fn = generate_fitness_fn(
+            envs.minigrid.MiniGrid,
+            eval_training_steps=eval_training_steps,
+            eval_test_steps=eval_test_steps,
+            training_steps=training_steps,
+            possible_box_positions=[(None, None) for _ in range(6)],
         )
         nr_tiles = side_size * side_size
         nr_agent_states = 4  # None, Hungry, Thristy, Hungry+Thristy

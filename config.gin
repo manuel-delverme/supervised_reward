@@ -1,8 +1,6 @@
 import time
 
-main.experiment_id = 'boxworld'
-
-main.population = 15
+main.population = 1
 # main.population = 15
 
 main.training_steps = 10000
@@ -10,7 +8,9 @@ main.eval_training_steps = 2000
 main.eval_test_steps = 1000
 main.side_size = 7
 # main.env_name = "hungry-thirsty"
-main.env_name = "boxes"
+main.env_name = "minigrid"
 main.evolution_iters = 100000
 learn.generate_on_rw = True
 learn.replace_reward = True
+
+main.experiment_id = 'minigrid'

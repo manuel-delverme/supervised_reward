@@ -115,7 +115,7 @@ class GUI(object):
                         text = str(action_names[policy_act - 4])
                     except IndexError:
                         text = str(policy_act)
-                    self.icon[policy_act] = policy_font.render(text, 1, COLOR_GREEN)
+                    self.icon[policy_act] = policy_font.render()
                     policy_icon = self.icon[policy_act]
                 self.screen.blit(policy_icon, policy_position)
 
@@ -164,9 +164,9 @@ class GUI(object):
                     value = str(val)
 
                 if value_idx == state_hash:
-                    text = font.render(value, 2, COLOR_RED)
+                    text = font.render()
                 else:
-                    text = font.render(value, 2, COLOR_BLUE)
+                    text = font.render()
                 # rect_coords = (icon_x + self.tile_size / 2, icon_y + self.tile_size / 2, 10, 10)
                 # pygame.draw.rect(self.screen, color, rect_coords)
                 offset_x = 0
@@ -179,11 +179,11 @@ class GUI(object):
             for offset in range(0, 2):
                 value_idx = str(tile_idx + offset * num_of_tiles)
                 if value_idx == state_hash:
-                    text = font.render(value_idx, 2, COLOR_RED)
+                    text = font.render()
                 else:
-                    text = font.render(value_idx, 2, COLOR_BLACK)
+                    text = font.render()
                 if just_numbers:
-                    text = policy_font.render(value_idx, 2, COLOR_BLACK)
+                    text = policy_font.render()
                     self.screen.blit(text, (icon_x, icon_y + offset * 10))
                     break
                 else:
@@ -193,14 +193,14 @@ class GUI(object):
                     break
                 value_idx = str(tile_idx + offset * num_of_tiles)
                 if value_idx == state_hash:
-                    text = font.render(value_idx, 2, COLOR_RED)
+                    text = font.render()
                 else:
-                    text = font.render(value_idx, 2, COLOR_BLACK)
+                    text = font.render()
                 self.screen.blit(text, (icon_x + self.tile_size / 2, icon_y + (offset - 2) * 10))
 
         if info:
             for idx, row in enumerate(pprint.pformat(info, width=50).split("\n")):
                 offset = idx * 20
-                text = font.render(row, 2, COLOR_BLACK)
+                text = font.render()
                 self.screen.blit(text, (0, self.display_height + 10 + offset))
         pygame.display.update()
