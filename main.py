@@ -9,14 +9,13 @@ import envs.boxes
 import envs.minigrid
 import envs.hungry_thirsty
 import learners.q_learning
-import gin
+import config
 
 
 # import multiprocessing.reduction
 # multiprocessing.reduction.ForkingPickler
 
 
-@gin.configurable
 def main(experiment_id, population, training_steps, eval_training_steps, eval_test_steps, side_size,
          evolution_iters, env_name):
     possible_box_positions = list(
@@ -56,6 +55,13 @@ def main(experiment_id, population, training_steps, eval_training_steps, eval_te
         nr_tiles = side_size * side_size
         nr_agent_states = 4  # None, Hungry, Thristy, Hungry+Thristy
         reward_space_size = nr_tiles * nr_agent_states
+    elif env_name == "debug":
+        def fitness_fn(reward_vector):
+            if reward_vector is None:
+                return 0, []
+            else:
+                return np.array(reward_vector).sum(), []
+        reward_space_size = 100
     else:
         raise NotImplementedError("{} is not a valid environment".format(env_name))
 
@@ -63,15 +69,7 @@ def main(experiment_id, population, training_steps, eval_training_steps, eval_te
         population_size=population,
         reward_space_size=reward_space_size,
     )
-    regressor.optimize(
-        experiment_id,
-        fitness_function=fitness_fn,
-        n_iterations=evolution_iters,
-        mdp_parameters={
-            'side_size': side_size,
-            'possible_box_positions': tuple(possible_box_positions),
-        },
-    )
+    regressor.optimize(experiment_id, fitness_function=fitness_fn, n_iterations=evolution_iters,)
 
 
 def generate_fitness_fn(
@@ -114,5 +112,13 @@ def generate_fitness_fn(
 
 
 if __name__ == "__main__":
-    gin.parse_config_file('config.gin')
-    main()
+    main(
+        config.main.experiment_id,
+        config.main.population,
+        config.main.training_steps,
+        config.main.eval_training_steps,
+        config.main.eval_test_steps,
+        config.main.side_size,
+        config.main.evolution_iters,
+        config.main.env_name
+    )

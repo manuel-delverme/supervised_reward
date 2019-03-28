@@ -1,9 +1,9 @@
 import random
-import gin
 import time
-import tqdm
 
 import numpy as np
+
+import config
 from utils import disk_utils
 
 TERMINATE_OPTION = -1
@@ -59,8 +59,9 @@ class QLearning(object):
 
         return action_idx, primitive_action_idx
 
-    @gin.configurable
-    def learn(self, generate_options=False, plot_every=None, xs=None, replace_reward=True, generate_on_rw=False, plot_progress=False):
+    def learn(self, generate_options=False, plot_every=None, xs=None, replace_reward=config.learn.replace_reward,
+              generate_on_rw=config.learn.generate_on_rw, use_learned_options=config.learn.use_learned_options):
+
         xs = set(xs)
 
         cumulative_reward = 0
@@ -159,7 +160,7 @@ class QLearning(object):
             if generate_options and option_gen_metric > 0 and self.environment.agent_position_idx not in option_goals:
                 # reward = self.surrogate_reward(self.environment)
                 # goal = self.environment.agent_position_idx
-                option_goals.add(self.generate_option(old_state))
+                option_goals.add(self.generate_option(old_state, use_learned_options))
 
             old_state = new_state
 
@@ -171,18 +172,19 @@ class QLearning(object):
         opts = self.available_actions[self.environment.action_space.n:]
         return opts, cumulative_reward, fitnesses
 
-    def generate_option(self, goal):
+    def generate_option(self, goal, use_learned_options):
         new_option = learn_option(goal, self.environment)
         new_option = tuple(new_option)
 
-        # new_option = learn_option(old_state, self.environment)
         self.available_actions.append(new_option)
-        option_idx = self.Q.shape[1] + 1
-        self.action_to_id[new_option] = option_idx - 1
-        tmp_Q = np.empty((self.Q.shape[0], option_idx))
-        tmp_Q[:, :-1] = self.Q
-        self.Q = tmp_Q
-        self.Q[:, -1] = self.Q[:, :-1].mean(axis=1)
+        if use_learned_options:
+            # new_option = learn_option(old_state, self.environment)
+            option_idx = self.Q.shape[1] + 1
+            self.action_to_id[new_option] = option_idx - 1
+            tmp_Q = np.empty((self.Q.shape[0], option_idx))
+            tmp_Q[:, :-1] = self.Q
+            self.Q = tmp_Q
+            self.Q[:, -1] = self.Q[:, :-1].mean(axis=1)
         return self.environment.agent_position_idx
 
     def test(self, eval_steps, render=False):
@@ -247,7 +249,7 @@ def is_terminate_option(skill, old_state):
 
 @disk_utils.disk_cache
 # @gin.configurable
-def learn_option(goal, mdp, training_steps=10000): # reduced for 7x7
+def learn_option(goal, mdp, training_steps=10000):  # reduced for 7x7
     print("generating policy for goal:{}".format(goal))
 
     def surrogate_reward(state):
@@ -257,7 +259,7 @@ def learn_option(goal, mdp, training_steps=10000): # reduced for 7x7
             return -1
 
     learner = QLearning(env=mdp, options=None, surrogate_reward=surrogate_reward, goal=goal)
-    _, _, fitnesses = learner.learn(xs=[training_steps, ], plot_every=None) # plot_every=training_steps//5)
+    _, _, fitnesses = learner.learn(xs=[training_steps, ], plot_every=None)  # plot_every=training_steps//5)
     option = np.argmax(learner.Q, axis=1)
 
     if hasattr(mdp, 'number_of_tiles'):

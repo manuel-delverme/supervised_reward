@@ -1,4 +1,5 @@
 # import hashlib
+import functools
 import os
 import pickle
 import numpy as np
@@ -28,6 +29,8 @@ def disk_cache(function):
                         option_name = option_policy.index(-1)
                         new_arg.append(option_name)
                     arg = str(new_arg)
+                if isinstance(arg, functools.partial):
+                    arg = str(arg.func)
                 else:
                     arg = str(arg)
                     if len(arg) > 100:

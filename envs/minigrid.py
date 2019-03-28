@@ -1,8 +1,10 @@
 import enum
+import warnings
 import random
 import gym.spaces
 import gym_minigrid
 import gym_minigrid.minigrid
+import numpy as np
 
 
 def to_tuple(img):
@@ -17,31 +19,21 @@ class BoxWorldActions(enum.Enum):
     LEFT = 3
 
 
+image_offsets = 2 ** np.arange(5 * 5).reshape(5, 5)
+
+
 class MiniGrid(gym.Env):
     def __init__(self, *task_parameters):
         del task_parameters
         self.env = gym.make('MiniGrid-Empty-6x6-v0')
-        # env = FullyObsWrapper(env)
-        # self.env.max_steps = min(self.env.max_steps, 200)
-        self.id_to_observation = []
-        self.id_to_observation_set = set()
-        self.observation_to_id_dict = dict()
 
     def encode_observation(self, obs):
-        a = obs['image']
-        a.flags.writeable = False
-
-        obs = (a.tostring(), obs['direction'])
-
-        if obs not in self.id_to_observation_set:
-            self._add_encoding(obs)
-        idx = self.observation_to_id_dict[obs]
-        return idx
-
-    def _add_encoding(self, obs):
-        self.id_to_observation_set.add(obs)
-        self.id_to_observation.append(obs)
-        self.observation_to_id_dict[obs] = len(self.id_to_observation) - 1
+        image = obs['image'][:, :, 0]  # ignore the color and the state (for now)
+        assert set(obs).issubset({1, 2, 8})
+        image.flags.writeable = False
+        obs = image.tostring()
+        warnings.warn("TODO: make sure that turning makes the image turn")
+        return obs
 
     @property
     def action_space(self):
@@ -53,9 +45,7 @@ class MiniGrid(gym.Env):
 
     @property
     def observation_space(self):
-        possible_states = 19600  # not really sure about this
-        possible_states *= 10  # safety
-        return gym.spaces.Discrete(possible_states)
+        raise NotImplementedError
 
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
@@ -74,4 +64,3 @@ class MiniGrid(gym.Env):
 
     def show_board(self, *args, **kwargs):
         self.render()
-

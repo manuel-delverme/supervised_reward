@@ -1,8 +1,10 @@
 import enum
-import envs.gridworld
 import random
+
 import gym.spaces
 import numpy as np
+
+import envs.gridworld
 
 
 class HungryThirstyActions(enum.Enum):

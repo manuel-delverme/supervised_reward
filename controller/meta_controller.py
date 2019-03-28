@@ -1,7 +1,8 @@
 import operator
+
 import matplotlib
+
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import os
 import time
 
@@ -18,6 +19,7 @@ import tqdm
 
 class GeneticEvolution(object):
     def __init__(self, reward_space_size, population_size):
+        print("init")
         self.population_size = population_size
         self.reward_space_size = reward_space_size
 
@@ -30,16 +32,18 @@ class GeneticEvolution(object):
         # self._toolbox.register('compile', self._compile_to_sklearn)
         self._toolbox.register('mate', deap.tools.cxTwoPoint)
         # self._toolbox.register('expr_mut', self._gen_grow_safe, min_=1, max_=4)
-        # self._toolbox.register('mutate', deap.tools.mutGaussian, mu=0.0, sigma=4.0, indpb=0.2)
-        self._toolbox.register('mutate', deap.tools.mutShuffleIndexes, indpb=0.2)
+        self._toolbox.register('mutate', deap.tools.mutGaussian, mu=0.0, sigma=0.1, indpb=0.2)
+        # self._toolbox.register('mutate', deap.tools.mutShuffleIndexes, indpb=0.2)
 
-        pool = multiprocessing.Pool()
-        self._toolbox.register("map", pool.map)
+        # pool = multiprocessing.Pool(processes=6)
+        # self._toolbox.register("map", pool.map)
+        self._toolbox.register("map", map)
 
         self._toolbox.register("attr_init", lambda: (np.random.randn() - 2))
         self._toolbox.register("individual", deap.tools.initRepeat, deap.creator.Individual, self._toolbox.attr_init,
                                n=reward_space_size)
-        self._toolbox.register("select", deap.tools.selBest, k=3)
+        # self._toolbox.register("select", deap.tools.selBest, k=3)
+        self._toolbox.register("select", deap.tools.selTournament, k=population_size, tournsize=3)
         self._toolbox.register('population', deap.tools.initRepeat, list, self._toolbox.individual)
         self.statistics = deap.tools.Statistics(key=operator.attrgetter("fitness.values"))
 
@@ -47,8 +51,9 @@ class GeneticEvolution(object):
         self.statistics.register("mean", np.mean)
         self.statistics.register("min", np.min)
         self.statistics.register("std", np.std)
+        print("init done")
 
-    def optimize(self, experiment_id, fitness_function, n_iterations, mdp_parameters):
+    def optimize(self, experiment_id, fitness_function, n_iterations):
         self._toolbox.register("evaluate", fitness_function)
         hall_of_fame = deap.tools.HallOfFame(maxsize=10)
 
@@ -63,23 +68,23 @@ class GeneticEvolution(object):
             }
             summary_writer.add_custom_scalars(layout)
 
-            old_fbest = 0
-            random_best = 0.0
-            old_random_best = -1.0
+            old_fbest = -float('inf')
+            random_best = -float('inf')
+            old_random_best = -float('inf')
             baseline, _ = fitness_function(None)
 
             cxpb, mutpb = 0.5, 0.2
             population = self._toolbox.population(n=self.population_size)
-            _ = fitness_function(population[0])
+            _ = fitness_function(population[0]) # raise errors
             fitness_list = self._toolbox.map(self._toolbox.evaluate, population)
             for ind, fit in zip(population, fitness_list):
-                ind.fitness.values = (fit[0], )
+                ind.fitness.values = (fit[0],)
                 ind.statistics['options'] = fit[1]
 
             for optimization_iteration in tqdm.tqdm(range(n_iterations), desc="optimization"):
 
                 # solutions = self.solver.ask(number=self.population_size)
-                selected_solutions = self._toolbox.select(population, k=len(population))
+                selected_solutions = self._toolbox.select(population) # , k=len(population))
                 population = deap.algorithms.varAnd(selected_solutions, self._toolbox, cxpb, mutpb)
 
                 # fitness_list, options = self.eval_solutions(fitness_function, mdp_parameters, solutions)
@@ -96,8 +101,7 @@ class GeneticEvolution(object):
                 hall_of_fame.update(population)
 
                 random_solutions = np.random.randn(self.population_size, self.reward_space_size) - 2
-                random_fitness_list, random_options = self.eval_solutions(fitness_function, mdp_parameters,
-                                                                          random_solutions)
+                random_fitness_list, random_options = self.eval_solutions(fitness_function, random_solutions)
 
                 # xbest = self.solver.result.xbest
                 # fbest = self.solver.result.fbest
@@ -118,53 +122,27 @@ class GeneticEvolution(object):
                 summary_writer.add_scalar('optimization/max', stats['max'], optimization_iteration)
                 summary_writer.add_scalar('optimization/std', stats['std'], optimization_iteration)
                 summary_writer.add_scalar('optimization/best', fbest, optimization_iteration)
+                summary_writer.add_scalar('optimization/nr_options_best', len(best_options), optimization_iteration)
                 # summary_writer.add_histogram('optimization/sigmas', self.solver.sm.variances, optimization_iteration)
 
-                summary_writer.add_scalar('optimization/random_mean', random_fitness_list.mean(),
-                                          optimization_iteration)
+                summary_writer.add_scalar('optimization/random_mean', random_fitness_list.mean(), optimization_iteration)
                 summary_writer.add_scalar('optimization/random_min', random_fitness_list.min(), optimization_iteration)
                 summary_writer.add_scalar('optimization/random_max', random_fitness_list.max(), optimization_iteration)
-                summary_writer.add_scalar('optimization/random_var', random_fitness_list.var(), optimization_iteration)
+                # summary_writer.add_scalar('optimization/random_var', random_fitness_list.var(), optimization_iteration)
                 summary_writer.add_scalar('optimization/random_best', random_best, optimization_iteration)
 
                 summary_writer.add_scalar('optimization/baseline', baseline, optimization_iteration)
 
                 if old_fbest != fbest:
                     old_fbest = fbest
-                    side_size = 7
-                    for idx, values in enumerate(np.array(best_element).reshape(-1, side_size * side_size)):
-                        value_map = values.reshape(side_size, side_size)
-                        fig = plt.figure()
-                        ax = fig.add_subplot(111)
-                        cax = ax.matshow(value_map)
-                        fig.colorbar(cax)
-                        summary_writer.add_figure('best_weights{}'.format(idx), fig, optimization_iteration)
-
-                    opts = best_options[np.argwhere(fitness_list == -fbest)[0][0]]
-                    opt_map = np.zeros((side_size, side_size))
-                    for opt in opts:
-                        for idx, action in enumerate(opt):
-                            if action == -1:
-                                goal_pos = idx % (side_size * side_size)
-                                y, x = divmod(goal_pos, side_size)
-                                opt_map[y][x] = 1
-                                break
-                    fig = plt.figure()
-                    ax = fig.add_subplot(111)
-                    cax = ax.matshow(opt_map)
-                    fig.colorbar(cax)
-                    summary_writer.add_figure('best_options', fig, optimization_iteration)
 
         return None, None
 
-    def eval_solutions(self, fitness_function, mdp_parameters, solutions):
-        args = []
-        for s in solutions:
-            args.append(s)
+    def eval_solutions(self, fitness_function, solutions):
         # result = pool.map(fitness_function, args)
-        result = map(fitness_function, args)
+        result = map(fitness_function, solutions)
+
         fitness_list, options = list(zip(*result))
         fitness_list = np.array(fitness_list)
         assert not np.isnan(np.min(fitness_list))
-        fitness_list = np.array(fitness_list)
         return fitness_list, options
