@@ -1,6 +1,9 @@
 import functools
 import itertools
 from typing import Callable, List, Tuple
+
+import controller.genetic
+import controller.hyperband
 from utils import utils
 import random
 import numpy as np
@@ -65,7 +68,10 @@ def main(experiment_id, population, training_steps, eval_training_steps, eval_te
     else:
         raise NotImplementedError("{} is not a valid environment".format(env_name))
 
-    regressor = controller.meta_controller.GeneticEvolution(
+    # search_algo = controller.hyperband.HyperBand
+    search_algo = controller.genetic.GeneticEvolution
+
+    regressor = search_algo(
         population_size=population,
         reward_space_size=reward_space_size,
     )
@@ -81,7 +87,7 @@ def generate_fitness_fn(
 ):
     _possible_box_positions = tuple(possible_box_positions)
 
-    def fitness_fn(reward_vector):
+    def fitness_fn(reward_vector, num_iter=None):
         if reward_vector is None:
             intrinsic_reward_function = None
             generate_options = False

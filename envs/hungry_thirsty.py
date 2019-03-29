@@ -1,4 +1,4 @@
-import enum
+import functools
 import random
 
 import gym.spaces
@@ -7,7 +7,7 @@ import numpy as np
 import envs.gridworld
 
 
-class HungryThirstyActions(enum.Enum):
+class HungryThirstyActions:
     UP = 0
     RIGHT = 1
     DOWN = 2
@@ -22,20 +22,36 @@ class HungryThirsty(envs.gridworld.GridWorld):
             'hungry': True,
             'thirsty': True,
         }
+
+        def _make_hash(number_of_tiles):
+            n_o_t = number_of_tiles
+            n_o_t2 = number_of_tiles * 2
+
+            @functools.lru_cache(maxsize=49*2*2)
+            def __hash_state(position_idx, hungry, thirsty):
+                if hungry:
+                    position_idx += n_o_t
+                if thirsty:
+                    position_idx += n_o_t2
+                return position_idx
+
+            return __hash_state
+
+        self.__hash_state = _make_hash(side_size * side_size)
+
         super(HungryThirsty, self).__init__(
             side_size=side_size,
             terminal_states=(),
             base_transition_probability=0.9,
         )
+
         extra_dof = len(self._state) * 2
         self.water_position, self.food_position = box1, box2
         self.observation_space = gym.spaces.Discrete(self.observation_space.n * extra_dof)
         self.action_space = gym.spaces.Discrete(self.action_space.n + len(self._state))
 
     def _step(self, action):
-        action = HungryThirstyActions(action)
         terminal = False
-        info = {}
         self._state['hungry'] = True
 
         if action == HungryThirstyActions.EAT_FOOD:
@@ -45,7 +61,7 @@ class HungryThirsty(envs.gridworld.GridWorld):
             if self.agent_position_idx == self.water_position:
                 self._state['thirsty'] = False
         else:
-            tile_idx, reward, terminal, info = super(envs.gridworld.GridWorld, self)._step(action.value)
+            tile_idx, reward, terminal, info = super(envs.gridworld.GridWorld, self)._step(action)
 
         state_obj = self._hash_state()
 
@@ -53,7 +69,7 @@ class HungryThirsty(envs.gridworld.GridWorld):
         if not self._state['hungry']:
             reward = 100
             self._state['thirsty'] = True
-        return state_obj, reward, terminal, info
+        return state_obj, reward, terminal, None
 
     def _reset(self):
         _ = super(envs.gridworld.GridWorld, self)._reset()
@@ -62,10 +78,7 @@ class HungryThirsty(envs.gridworld.GridWorld):
         return self._hash_state()
 
     def _hash_state(self):
-        state_hash = self.agent_position_idx
-        state_hash += self._state['hungry'] * self.number_of_tiles
-        state_hash += self._state['thirsty'] * self.number_of_tiles * 2
-        return state_hash  # state.State(state_hash=state_hash, state_info=self._state.copy())
+        return self.__hash_state(self.agent_position_idx, self._state['hungry'], self._state['thirsty'])
 
     def show_board(self, some_matrix=None, close=False, policy=None, highlight_square=None, info={}, option_vec=(),
                    highlight_squares=(), state_offset=None):

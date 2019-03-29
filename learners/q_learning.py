@@ -33,6 +33,13 @@ class QLearning(object):
         self.qargmax = np.argmax(self.Q, axis=1)
         self.surrogate_reward = surrogate_reward
 
+        def make_is_option(num_actions):
+            def is_option(action):
+                return action is not None and action >= num_actions
+            return is_option
+
+        self.is_option = make_is_option(self.nr_primitive_actions)
+
     def pick_action_test(self, state, old_action_idx, old_primitive_action):
         return self.pick_action(state, old_action_idx, old_primitive_action, explore=True)
 
@@ -61,6 +68,10 @@ class QLearning(object):
 
     def learn(self, generate_options=False, plot_every=None, xs=None, replace_reward=config.learn.replace_reward,
               generate_on_rw=config.learn.generate_on_rw, use_learned_options=config.learn.use_learned_options):
+
+        # before removal: 1.[20-40]/it at 40
+        if not generate_options and self.nr_primitive_actions == len(self.available_actions):
+            self.is_option = lambda x: False
 
         xs = set(xs)
 
@@ -222,10 +233,6 @@ class QLearning(object):
 
                 old_state = new_state
         return fitness / 100
-
-    def is_option(self, action):
-        # return action is not None and not isinstance(action, int) and not isinstance(action, np.int64)
-        return action is not None and action >= self.nr_primitive_actions
 
     def render_board(self, render, highlight_square=None, sleep_time=1. / 30., info={}):
         if render > 0:

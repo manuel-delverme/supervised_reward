@@ -38,7 +38,6 @@ class DiscreteEnv(Env):
     def __init__(self, number_of_states, number_of_actions, transition_matrix, initial_state_distribution):
         self.transition_matrix = transition_matrix
         self.initial_state_distribution = initial_state_distribution
-        self.last_action = None  # for rendering
         self.number_of_tiles = number_of_states
         self.number_of_actions = number_of_actions
 
@@ -54,7 +53,6 @@ class DiscreteEnv(Env):
 
     def _reset(self):
         self.agent_position_idx = categorical_sample(self.initial_state_distribution, self.np_random)
-        self.last_action = None
         return self.agent_position_idx
 
     def _step(self, action):
@@ -67,5 +65,4 @@ class DiscreteEnv(Env):
                 break
         p, s, r, d = t
         self.agent_position_idx = s
-        self.last_action = action
-        return s, r, d, {"prob": p}
+        return s, r, d, None
