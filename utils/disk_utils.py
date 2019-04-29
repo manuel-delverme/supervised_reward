@@ -8,6 +8,8 @@ import os
 import hashlib
 import gzip
 
+import config
+
 
 def disk_cache(function):
     def wrapper(*args, **kwargs):
@@ -36,11 +38,11 @@ def disk_cache(function):
                     if len(arg) > 100:
                         arg = hashlib.sha1(arg.encode('utf-8')).hexdigest()
                 args_filtered.append(arg.replace("/", "_"))
-            if function.__name__ == "eval_option_on_mdp":
-                option_hash = args_filtered[-2]
-                del args_filtered[-2]
-                new_hash = list(option_hash[:6]) + [option_hash[6:]]
-                args_filtered = args_filtered[:-1] + new_hash + args_filtered[-1:]
+            # if function.__name__ == "eval_option_on_mdp":
+            #     option_hash = args_filtered[-2]
+            #     del args_filtered[-2]
+            #     new_hash = list(option_hash[:6]) + [option_hash[6:]]
+            #     args_filtered = args_filtered[:-1] + new_hash + args_filtered[-1:]
 
             fid = fid + "/" + "/".join(args_filtered)
             cache_file = "cache/{}".format(fid)
@@ -63,7 +65,10 @@ def disk_cache(function):
                 storage_fn = open
             else:
                 storage_fn = gzip.open
-            with storage_fn(cache_file, "wb") as fout:
-                pickle.dump(retr, fout)
+            if config.DEBUG:
+                print("NOT CACHING {} BECAUSE DEBUG".format(fid))
+            else:
+                with storage_fn(cache_file, "wb") as fout:
+                    pickle.dump(retr, fout)
         return retr
     return wrapper

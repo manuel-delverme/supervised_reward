@@ -1,9 +1,11 @@
+import gym_minigrid
+import gym
+
+import collections
 import enum
 import warnings
-import random
+
 import gym.spaces
-import gym_minigrid
-import gym_minigrid.minigrid
 import numpy as np
 
 
@@ -28,16 +30,13 @@ class MiniGrid(gym.Env):
         self.env = gym.make('MiniGrid-Empty-6x6-v0')
 
     def encode_observation(self, obs):
-        image = obs['image'][:, :, 0]  # ignore the color and the state (for now)
-        assert set(obs).issubset({1, 2, 8})
-        image.flags.writeable = False
-        obs = image.tostring()
-        warnings.warn("TODO: make sure that turning makes the image turn")
-        return obs
+        return tuple([*self.env.agent_pos, obs['direction']])
 
     @property
     def action_space(self):
-        return self.env.action_space
+        # return self.env.action_space
+        # pickup, drop, toggle, done are removed
+        return gym.spaces.Discrete(3)
 
     @property
     def agent_position_idx(self):
@@ -45,18 +44,22 @@ class MiniGrid(gym.Env):
 
     @property
     def observation_space(self):
-        raise NotImplementedError
+        # x, y, orientation
+        return gym.spaces.discrete.Discrete(3)
 
     def step(self, action):
+        assert 0 <= action <= 3
         obs, reward, done, info = self.env.step(action)
+        info['original_observation'] = obs
+        # reward = reward-sum((abs(a) for a in (self.env.agent_pos[0] - 4, self.env.agent_pos[1] - 4))) / 10
         return self.encode_observation(obs), reward, done, info
 
     def reset(self):
         obs = self.env.reset()
         return self.encode_observation(obs)
 
-    def render(self, **kwargs):
-        renderer = self.env.render()
+    def render(self, *args, **kwargs):
+        renderer = self.env.render(*args, **kwargs)
         return renderer
 
     def close(self):
@@ -64,3 +67,6 @@ class MiniGrid(gym.Env):
 
     def show_board(self, *args, **kwargs):
         self.render()
+
+    def __repr__(self):
+        return 'MiniGrid-Empty-6x6-v0'

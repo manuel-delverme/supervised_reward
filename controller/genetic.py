@@ -10,9 +10,45 @@ import numpy as np
 import tensorboardX
 import tqdm
 
+import config
+import envs.boxes
+import envs.hungry_thirsty
+import envs.minigrid
+import learners.approx_q_learning
+from utils import utils
+
+
+def fitness_function(reward_vector):
+    if reward_vector is None:
+        intrinsic_reward_function = None
+        generate_options = False
+    else:
+        reward_vector = np.array(reward_vector)
+        generate_options = True
+
+        def intrinsic_reward_function(state, info):
+
+            image = info['original_observation']['image'][:, :, 0].ravel()
+            return reward_vector[:-1].dot(image) + reward_vector[-1]
+
+    # draw training environment
+    mdp = envs.minigrid.MiniGrid()
+
+    if intrinsic_reward_function is None:
+        options = []
+    else:
+        # generate options in that
+        options, _, _, _ = learners.approx_q_learning.learn(environment=mdp, surrogate_reward=intrinsic_reward_function, training_steps=config.main.option_discovery_steps,
+                                                            generate_options=generate_options, eval_fitness=False)
+
+    print("eval options", str(sorted([str(o) for o in options]))[:50], end=' ')
+    fitness = utils.eval_options(envs.minigrid.MiniGrid(), options)
+    print(config.main.option_eval_training_steps, fitness)
+    return fitness, options
+
 
 class GeneticEvolution(object):
-    def __init__(self, reward_space_size, population_size):
+    def __init__(self, reward_space_size, population_size=config.main.population):
         print("init")
         self.population_size = population_size
         self.reward_space_size = reward_space_size
@@ -33,7 +69,7 @@ class GeneticEvolution(object):
         # self._toolbox.register("map", pool.map)
         self._toolbox.register("map", map)
 
-        self._toolbox.register("attr_init", lambda: (np.random.randn() - 2))
+        self._toolbox.register("attr_init", lambda: (np.random.randn() - (2 / reward_space_size)))
         self._toolbox.register("individual", deap.tools.initRepeat, deap.creator.Individual, self._toolbox.attr_init,
                                n=reward_space_size)
         # self._toolbox.register("select", deap.tools.selBest, k=3)
@@ -47,7 +83,7 @@ class GeneticEvolution(object):
         self.statistics.register("std", np.std)
         print("init done")
 
-    def optimize(self, experiment_id, fitness_function, n_iterations):
+    def optimize(self, experiment_id, n_iterations=config.main.evolution_iters):
         self._toolbox.register("evaluate", fitness_function)
         hall_of_fame = deap.tools.HallOfFame(maxsize=10)
 
@@ -65,11 +101,20 @@ class GeneticEvolution(object):
             old_fbest = -float('inf')
             random_best = -float('inf')
             old_random_best = -float('inf')
-            baseline, _ = fitness_function(None)
 
             cxpb, mutpb = 0.5, 0.2
             population = self._toolbox.population(n=self.population_size)
-            _ = fitness_function(population[0])  # raise errors
+
+            # if config.DEBUG:
+            #     _ = fitness_function(population[0])  # raise errors
+
+            fitness = self.get_best_option_score()
+            print(fitness)
+
+            print('eval baseline: ', end='')
+            baseline, _ = fitness_function(None)
+            print(baseline)
+
             fitness_list = self._toolbox.map(self._toolbox.evaluate, population)
             for ind, fit in zip(population, fitness_list):
                 ind.fitness.values = (fit[0],)
@@ -132,6 +177,13 @@ class GeneticEvolution(object):
                     old_fbest = fbest
 
         return None, None
+
+    def get_best_option_score(self):
+        options = [learners.approx_q_learning.generate_option(config.main.environment(), (4, 4, 0), False), ]
+        print("eval options", str(sorted([str(o) for o in options]))[:50], end=' ')
+        fitness = utils.eval_options(envs.minigrid.MiniGrid(), options)
+        print(config.main.option_eval_training_steps, fitness)
+        return fitness
 
     def eval_solutions(self, fitness_function, solutions):
         # result = pool.map(fitness_function, args)
