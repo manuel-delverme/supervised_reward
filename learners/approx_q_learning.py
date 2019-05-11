@@ -1,4 +1,3 @@
-import itertools
 import random
 import time
 
@@ -7,6 +6,7 @@ import sklearn.kernel_approximation
 import sklearn.linear_model
 import sklearn.pipeline
 import sklearn.preprocessing
+import tqdm
 
 import config
 from utils import disk_utils
@@ -42,9 +42,9 @@ class CachedPolicy:
 
 
 class FeatureTransformer:
-    def __init__(self, observation_size):
+    def __init__(self):
         featurizer = sklearn.pipeline.FeatureUnion([
-            ("norm", sklearn.preprocessing.StandardScaler(copy=False)),
+            # ("norm", sklearn.preprocessing.StandardScaler(copy=False)),
             ("rbf0", sklearn.kernel_approximation.RBFSampler(gamma=8.0, n_components=100)),
             ("rbf1", sklearn.kernel_approximation.RBFSampler(gamma=4.0, n_components=100)),
             ("rbf2", sklearn.kernel_approximation.RBFSampler(gamma=2.0, n_components=100)),
@@ -52,33 +52,39 @@ class FeatureTransformer:
             ("rbf4", sklearn.kernel_approximation.RBFSampler(gamma=0.5, n_components=100)),
         ])
         self.featurizer = featurizer
-        obss = list(itertools.product(range(6), range(6), range(4)))
-        observations = np.array(obss).astype(np.float)
-        self.featurizer.fit(observations)
+        # obss = list(itertools.product(range(6), range(6), range(4)))
+        # observations = np.array(obss).astype(np.float)
+        self.featurizer.fit(np.random.randn(1, 147))
 
     def transform(self, observations):
-        observations = np.array(observations)
+        observations = np.array(observations).ravel().reshape(1, -1)
+        assert observations.shape == (1, 196)
         if len(observations.shape) == 1:
             observations = observations.reshape(1, -1)
         return self.featurizer.transform(observations.astype(np.float))
 
 
 class Estimator:
-    def __init__(self, observation_size: int, action_size: int, alpha: float):
+    def __init__(self, action_size: int, alpha: float):
         self.models = []
-        self.not_trained = [True, ] * action_size
-        self.feature_transformer = FeatureTransformer(observation_size)
+        self.not_trained = []
+        # self.feature_transformer = FeatureTransformer()
+        self.alpha = alpha
 
         for _ in range(action_size):
-            model = sklearn.linear_model.SGDRegressor(learning_rate='constant', eta0=alpha)
-            self.models.append(model)
+            self.add_new_action()
+
+    def add_new_action(self):
+        model = sklearn.linear_model.SGDRegressor(learning_rate='constant', eta0=self.alpha)
+        self.models.append(model)
+        self.not_trained.append(True)
 
     def predict(self, observation, action=None):
         assert action is None or action > -1
-        features = self.feature_transformer.transform(observation)
-        # assert (len(X.shape) == 2)
+        features = self.preprocess(observation)
+
         if (action is None and any(self.not_trained)) or (action is not None and not self.not_trained[action]):
-            return [random.random() / 100 for _ in self.models]
+            return [-random.random() / 1000 for _ in self.models]
         if not action:
             prediction = []
             for m in self.models:
@@ -88,11 +94,21 @@ class Estimator:
         else:
             return self.models[action].predict(features)[0]
 
-    def update(self, features, a, target):
-        X = self.feature_transformer.transform([features])
-        assert len(X.shape) == 2  # reshape(1, -1)
-        self.models[a].partial_fit(X, [target])
-        self.not_trained[a] = False
+    def update(self, observation, a, target):
+        iters = 10 if target > 0.1 else 1
+        for _ in range(iters):
+            features = self.preprocess(observation)
+            self.models[a].partial_fit(features, [target])
+            if self.not_trained[a]:
+                self.models[a].coef_ = (np.random.randn(*self.models[a].coef_.shape) * 0.0001)
+            self.not_trained[a] = False
+
+    def preprocess(self, observation):
+        # features = np.array(observation).reshape(1, -1)
+        features = observation.reshape(1, -1)
+        # features = self.feature_transformer.transform(observation)
+        assert len(features.shape) == 2  # reshape(1, -1)
+        return features
 
     # end update
 
@@ -106,7 +122,7 @@ class Estimator:
         if np.random.random() < eps:
             return self.env.action_space.sample()
         else:
-            return np.argmax(self.predict([s]))
+            return np.argmax(self.predict(s))
     # end sample_action
 
 
@@ -118,12 +134,14 @@ def pick_action_test(state, old_action_idx, old_primitive_action, is_option, nr_
                        exploit=True)
 
 
-def pick_action(observation, old_action_idx, old_primitive_action, is_option, *, exploit=False, epsilon=None, nr_primitive_actions=None,
-                available_actions=None, estimator=None):
-    if not is_option(old_action_idx) or old_primitive_action == TERMINATE_OPTION:
+def pick_action(observation, old_action_idx, old_primitive_action, is_option, *, exploit=False, epsilon=None, nr_primitive_actions=None, available_actions=None, estimator=None):
+    was_option = is_option(old_action_idx)
+    config.tensorboard.add_scalar('learning/was_option', was_option)
+
+    if not was_option or old_primitive_action == TERMINATE_OPTION:
         if exploit or epsilon < random.random():
             # greedy
-            q_values = estimator.predict([observation])
+            q_values = estimator.predict(observation)
             action_idx = int(np.argmax(q_values))
         else:
             # explore
@@ -137,7 +155,7 @@ def pick_action(observation, old_action_idx, old_primitive_action, is_option, *,
             primitive_action_idx = action_idx
     else:
         # keep following the option
-        assert is_option(old_action_idx)
+        assert was_option
         primitive_action_idx = available_actions[old_action_idx][observation]
         action_idx = old_action_idx
     return action_idx, primitive_action_idx
@@ -150,10 +168,10 @@ def td_update(estimator, state, action_idx, reward, future_reward):
     # discounted_reward = discounted_reward_under_option + reward * (gamma ** time_difference)
 
 
-def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.learn.alpha, surrogate_reward=None, goal=None, generate_options=False, terminate_on_surr_reward=False,
+def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.alpha, surrogate_reward=None, goal=None, generate_options=False, terminate_on_surr_reward=False,
           training_steps=None,
-          replace_reward=config.learn.replace_reward, generate_on_rw=config.learn.generate_on_rw, use_learned_options=config.learn.use_learned_options, eval_fitness=True, ):
-    estimator = Estimator(environment.observation_space.n, environment.action_space.n + len(options), alpha)
+          replace_reward=config.replace_reward, generate_on_rw=config.generate_on_rw, use_learned_options=config.use_learned_options, eval_fitness=True, ):
+    estimator = Estimator(environment.action_space.n + len(options or []), alpha)
     nr_primitive_actions = environment.action_space.n
     available_actions = list(range(nr_primitive_actions))
     action_size = environment.action_space.n
@@ -191,25 +209,38 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.le
     option_goals = set()
     terminal = False
     reward = None
-    seen_rewards = dict()
+    # seen_rewards = dict()
 
     old_state = environment.reset()
+    initial_position = environment.agent_position_idx
     new_state = old_state
 
-    for step in range(training_steps):  # tqdm.tqdm(range(training_steps), desc="Training"):
+    # for step in range(training_steps):
+    for step in tqdm.tqdm(range(training_steps), desc="Training"):
         action_idx, primitive_action = pick_action(old_state, old_action_idx=action_idx, epsilon=epsilon, nr_primitive_actions=nr_primitive_actions,
                                                    available_actions=available_actions, estimator=estimator, old_primitive_action=primitive_action, is_option=is_option)
+        config.tensorboard.add_histogram('learn/action_idx', action_idx, step)
+        config.tensorboard.add_scalar('learn/distance_traveled', np.linalg.norm(environment.agent_position_idx - initial_position), step)
+        config.tensorboard.add_scalar('learn/steps_left', environment.env.steps_remaining, step)
 
-        if option_begin_state is None and is_option(action_idx):
-            option_begin_state = old_state
+        if is_option(action_idx):
+            config.tensorboard.add_scalar('learn/option_taken', 1, step)
+            if option_begin_state is None:
+                option_begin_state = old_state
 
-        environment.render()
-        if terminal:
-            fancy_render(environment, estimator, seen_rewards, step)
+        else:
+            config.tensorboard.add_scalar('learn/option_taken', 0, step)
 
+        if config.visualize_learning and step > (training_steps - 100):
+            environment.render(reward=reward, step=step)
+            time.sleep(0.3)
+            # if terminal:
+            #     fancy_render(environment, estimator, seen_rewards, step)
+
+        # config.tensorboard.add_scalar('debug/step', step, step)
         if primitive_action == TERMINATE_OPTION:
             # option update and state reset
-            discounted_future_value = gamma * max(estimator.predict([new_state]))
+            discounted_future_value = gamma * max(estimator.predict(new_state))
             td_update(estimator, option_begin_state, action_idx, discounted_reward_under_option, discounted_future_value)
 
             time_steps_under_option = 0
@@ -217,17 +248,29 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.le
             option_begin_state = None
 
         else:
-            print(primitive_action, action_idx)
             new_state, reward, terminal, info = environment.step(available_actions[primitive_action])
             fitness += 1 if reward > 0 else 0
-            # environment.env.action_history.append((estimator.predict([old_state]), estimator.predict([old_state])[action_idx], action_idx, reward))
-            if config.learn.visualize_rewards and step % (max(training_steps) // 10) == 0 and step > 0:
-                environment.render()
-                fancy_render(environment, estimator, seen_rewards, step)
+
+            if config.shape_reward:
+                next_cells = [
+                    # *environment.env.doors,
+                    environment.env.goal_pos
+                ]
+
+                distance = 10000
+                for cell_pos in next_cells:
+                    # cell = environment.env.grid.get(*cell_pos)
+                    cell_distance = np.linalg.norm(environment.agent_position_idx - np.array(cell_pos))
+                    distance = min(distance, cell_distance)
+
+                reward -= distance / 100
+
 
             reward, terminal = update_reward(info, new_state, replace_reward, reward, terminal, terminate_on_surr_reward, surrogate_reward)
-            seen_rewards[new_state] = reward
+
             cumulative_reward += reward
+            config.tensorboard.add_scalar('learning/reward', reward, step)
+            config.tensorboard.add_scalar('learning/cum_reward', cumulative_reward, step)
 
             if terminal:
                 environment.reset()
@@ -245,8 +288,9 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.le
             if terminal:
                 discounted_future_value = 0
             else:
-                discounted_future_value = gamma * max(estimator.predict([new_state]))
+                discounted_future_value = gamma * max(estimator.predict(new_state))
 
+            config.tensorboard.add_scalar('learning/action_td', reward + discounted_future_value, step)
             td_update(estimator, old_state, primitive_action, reward, discounted_future_value)
 
             if is_option(action_idx):
@@ -255,6 +299,7 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.le
                 time_steps_under_option += 1
 
                 if terminal:
+                    config.tensorboard.add_scalar('learning/option_td', reward + discounted_future_value, step)
                     td_update(estimator, option_begin_state, action_idx, discounted_reward_under_option, future_reward=0)
                     time_steps_under_option = 0
                     discounted_reward_under_option = 0
@@ -272,14 +317,15 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.le
             new_option = generate_option(environment, old_state, use_learned_options)
             option_goals.add(old_state)
             available_actions.append(new_option)
+            estimator.add_new_action()
 
         old_state = new_state
 
     if eval_fitness:
-        test_fitness = test(environment=environment, estimator=estimator, eval_steps=config.main.option_eval_test_steps, render=False,
+        test_fitness = test(environment=environment, estimator=estimator, eval_steps=config.option_eval_test_steps, render=False,
                             terminate_on_surr_reward=terminate_on_surr_reward, is_option=is_option, surrogate_reward=surrogate_reward, available_actions=available_actions)
         # print("FITNESS: ", test_fitness)
-        # test_fitness = test(environment=environment, estimator=estimator, eval_steps=config.main.option_eval_test_steps // 10, render=True,
+        # test_fitness = test(environment=environment, estimator=estimator, eval_steps=config.option_eval_test_steps // 10, render=True,
         #                     terminate_on_surr_reward=terminate_on_surr_reward, is_option=is_option, surrogate_reward=surrogate_reward, available_actions=available_actions)
         # fancy_render(environment, estimator, seen_rewards, step)
     else:
@@ -335,6 +381,7 @@ def update_reward(info, new_state, replace_reward, reward, terminal, terminate_o
             reward = surr_reward
         else:
             reward += surr_reward
+
     return reward, terminal
 
 
@@ -398,7 +445,7 @@ def is_terminate_option(skill, old_state):
 
 
 @disk_utils.disk_cache
-def learn_option(goal, mdp, training_steps=config.learn.option_train_steps):  # reduced for 7x7
+def learn_option(goal, mdp, training_steps=config.option_train_steps):  # reduced for 7x7
     print("generating policy for goal:{}".format(goal))
     goal = tuple(goal)
 
@@ -409,8 +456,7 @@ def learn_option(goal, mdp, training_steps=config.learn.option_train_steps):  # 
             dist = abs(goal[0] - state[0]) + abs(goal[1] - state[1]) + abs(goal[2] - state[2]) * 0.01
             return -dist / 10
 
-    _, _, fitnesses, estimator = learn(environment=mdp, options=None, surrogate_reward=surrogate_reward, goal=goal,
-                                       training_steps=[training_steps, ], terminate_on_surr_reward=True,
+    _, _, fitnesses, estimator = learn(environment=mdp, options=None, surrogate_reward=surrogate_reward, goal=goal, training_steps=training_steps, terminate_on_surr_reward=True,
                                        replace_reward=True)
 
     print('GOAL:', goal)
@@ -418,5 +464,5 @@ def learn_option(goal, mdp, training_steps=config.learn.option_train_steps):  # 
 
     option = CachedPolicy(estimator)
     option[goal] = -1
-    option.name = goal
+    option.name = str(goal)
     return option

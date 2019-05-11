@@ -1,12 +1,12 @@
-import gym_minigrid
-import gym
-
-import collections
 import enum
-import warnings
 
+import gym
 import gym.spaces
+# noinspection PyUnresolvedReferences
+import gym_minigrid
 import numpy as np
+
+import config
 
 
 def to_tuple(img):
@@ -14,44 +14,61 @@ def to_tuple(img):
     return b
 
 
-class BoxWorldActions(enum.Enum):
-    UP = 0
-    RIGHT = 1
-    DOWN = 2
-    LEFT = 3
-
-
-image_offsets = 2 ** np.arange(5 * 5).reshape(5, 5)
-
-
 class MiniGrid(gym.Env):
+
     def __init__(self, *task_parameters):
         del task_parameters
-        self.env = gym.make('MiniGrid-Empty-6x6-v0')
+        self._env_name = config.env_name
+        self.env = gym.make(self._env_name)
+        self.env.max_steps = config.max_env_steps
+        self.env.see_trough_walls = True
 
     def encode_observation(self, obs):
-        return tuple([*self.env.agent_pos, obs['direction']])
+        image = obs['image']
+        info_map = np.zeros(shape=(*obs['image'].shape[:-1], 4))
+
+        # empty # floor; where you can go
+        info_map[:, :, 0] = np.logical_or(image[:, :, 0] == 3, image[:, :, 0] == 1, image[:, :, 0] == 8)
+
+        # wall and unseen are walls; where you can not go
+        info_map[:, :, 1] = np.logical_or(image[:, :, 0] == 2, image[:, :, 0] == 0)
+
+        # info_map[:, :, 0] = np.logical_or(info_map[:, :, 0], image[:, :, 0] == 3)
+        doors = image[:, :, 0] == 4  # door
+        opens = np.logical_not(image[:, :, 2])  # door
+        # you can go in open doors
+        info_map[:, :, 0][np.logical_and(doors, opens)] = 1
+        # you can not go in open doors
+        info_map[:, :, 1][np.logical_and(doors, np.logical_not(opens))] = 1
+        # you can interact with closed doors
+        info_map[:, :, 2] = np.logical_and(doors, np.logical_not(opens))
+        # goal positions
+        info_map[:, :, 3] = image[:, :, 0] == 8
+        assert info_map.max() == 1 and info_map.min() == 0
+
+        # in theory 1 and 2 are complementary, so they could be skipped
+        return info_map
 
     @property
     def action_space(self):
-        # return self.env.action_space
-        # pickup, drop, toggle, done are removed
-        return gym.spaces.Discrete(3)
+        # pickup, drop, done are removed
+        return gym.spaces.Discrete(4)
 
     @property
     def agent_position_idx(self):
-        return self.env.agent_pos
+        return np.array(self.env.agent_pos)
 
     @property
     def observation_space(self):
         # x, y, orientation
-        return gym.spaces.discrete.Discrete(3)
+        return gym.spaces.discrete.Discrete(149)
 
     def step(self, action):
-        assert 0 <= action <= 3
+        assert 0 <= action <= 4
+        if action == 3:
+            action = 5
         obs, reward, done, info = self.env.step(action)
-        info['original_observation'] = obs
-        # reward = reward-sum((abs(a) for a in (self.env.agent_pos[0] - 4, self.env.agent_pos[1] - 4))) / 10
+        # info['original_observation'] = obs
         return self.encode_observation(obs), reward, done, info
 
     def reset(self):
@@ -69,4 +86,7 @@ class MiniGrid(gym.Env):
         self.render()
 
     def __repr__(self):
-        return 'MiniGrid-Empty-6x6-v0'
+        return "ENV{" + self._env_name + "}"
+
+    def __str__(self):
+        return self.__repr__()

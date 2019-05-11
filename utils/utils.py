@@ -7,14 +7,14 @@ from utils import disk_utils
 
 def eval_options(env, options):
     cum_score = 0
-    for eval_step in range(config.main.repeat_eval_options):
+    for eval_step in range(config.repeat_eval_options):
         cum_score += eval_option_on_mdp(env, options)
     return cum_score / (eval_step + 1)
 
 
-@disk_utils.disk_cache
+# @disk_utils.disk_cache
 def eval_option_on_mdp(env, options):
-    _, _, fitness, _ = learners.approx_q_learning.learn(environment=env, options=options, training_steps=config.main.option_eval_training_steps, eval_fitness=True)
+    _, _, fitness, _ = learners.approx_q_learning.learn(environment=env, options=options, training_steps=config.option_eval_training_steps, eval_fitness=True)
     return fitness
 
 

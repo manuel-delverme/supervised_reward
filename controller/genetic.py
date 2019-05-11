@@ -1,13 +1,10 @@
 import operator
-import os
-import time
 
 import deap.algorithms
 import deap.base
 import deap.creator
 import deap.tools
 import numpy as np
-import tensorboardX
 import tqdm
 
 import config
@@ -38,17 +35,17 @@ def fitness_function(reward_vector):
         options = []
     else:
         # generate options in that
-        options, _, _, _ = learners.approx_q_learning.learn(environment=mdp, surrogate_reward=intrinsic_reward_function, training_steps=config.main.option_discovery_steps,
+        options, _, _, _ = learners.approx_q_learning.learn(environment=mdp, surrogate_reward=intrinsic_reward_function, training_steps=config.option_discovery_steps,
                                                             generate_options=generate_options, eval_fitness=False)
 
-    print("eval options", str(sorted([str(o) for o in options]))[:50], end=' ')
+    print("eval options", str(sorted([str(o) for o in options]))[:100], end=' ')
     fitness = utils.eval_options(envs.minigrid.MiniGrid(), options)
-    print(config.main.option_eval_training_steps, fitness)
+    print(fitness)
     return fitness, options
 
 
 class GeneticEvolution(object):
-    def __init__(self, reward_space_size, population_size=config.main.population):
+    def __init__(self, reward_space_size, population_size=config.population):
         print("init")
         self.population_size = population_size
         self.reward_space_size = reward_space_size
@@ -83,106 +80,95 @@ class GeneticEvolution(object):
         self.statistics.register("std", np.std)
         print("init done")
 
-    def optimize(self, experiment_id, n_iterations=config.main.evolution_iters):
+    def optimize(self, n_iterations=config.evolution_iters):
         self._toolbox.register("evaluate", fitness_function)
         hall_of_fame = deap.tools.HallOfFame(maxsize=10)
+        old_fbest = -float('inf')
+        random_best = -float('inf')
+        old_random_best = -float('inf')
 
-        log_dir = os.path.join('runs', experiment_id, time.strftime("%Y_%m_%d-%H_%M_%S"))
+        cxpb, mutpb = 0.5, 0.2
+        population = self._toolbox.population(n=self.population_size)
 
-        with tensorboardX.SummaryWriter(log_dir, flush_secs=5) as summary_writer:
-            layout = {
-                'best': {'optimization': ['Multiline',
-                                          ['optimization/baseline', 'optimization/best', 'optimization/random_best']]},
-                'mean': {'optimization': ['Multiline',
-                                          ['optimization/baseline', 'optimization/mean', 'optimization/random_mean']]},
-            }
-            summary_writer.add_custom_scalars(layout)
+        # if config.DEBUG:
+        #     _ = fitness_function(population[0])  # raise errors
 
-            old_fbest = -float('inf')
-            random_best = -float('inf')
-            old_random_best = -float('inf')
+        # fitness = self.get_best_option_score()
+        # print(fitness)
 
-            cxpb, mutpb = 0.5, 0.2
-            population = self._toolbox.population(n=self.population_size)
+        print('eval baseline: ', end='')
+        baseline, _ = fitness_function(None)
+        print(baseline)
+        raise NotImplementedError
 
-            # if config.DEBUG:
-            #     _ = fitness_function(population[0])  # raise errors
+        fitness_list = self._toolbox.map(self._toolbox.evaluate, population)
+        for ind, fit in zip(population, fitness_list):
+            ind.fitness.values = (fit[0],)
+            ind.statistics['options'] = fit[1]
 
-            fitness = self.get_best_option_score()
-            print(fitness)
+        for optimization_iteration in tqdm.tqdm(range(n_iterations), desc="optimization"):
 
-            print('eval baseline: ', end='')
-            baseline, _ = fitness_function(None)
-            print(baseline)
+            # solutions = self.solver.ask(number=self.population_size)
+            selected_solutions = self._toolbox.select(population)  # , k=len(population))
+            population = deap.algorithms.varAnd(selected_solutions, self._toolbox, cxpb, mutpb)
 
-            fitness_list = self._toolbox.map(self._toolbox.evaluate, population)
-            for ind, fit in zip(population, fitness_list):
+            # fitness_list, options = self.eval_solutions(fitness_function, mdp_parameters, solutions)
+
+            # udpate the new mutated individuals
+            invalids = [ind for ind in population if not ind.fitness.valid]
+            fitness_list = list(self._toolbox.map(self._toolbox.evaluate, invalids))
+
+            # self.solver.tell(solutions, -fitness_list, copy=True)
+            for ind, fit in zip(invalids, fitness_list):
                 ind.fitness.values = (fit[0],)
                 ind.statistics['options'] = fit[1]
 
-            for optimization_iteration in tqdm.tqdm(range(n_iterations), desc="optimization"):
+            hall_of_fame.update(population)
 
-                # solutions = self.solver.ask(number=self.population_size)
-                selected_solutions = self._toolbox.select(population)  # , k=len(population))
-                population = deap.algorithms.varAnd(selected_solutions, self._toolbox, cxpb, mutpb)
+            random_solutions = np.random.randn(self.population_size, self.reward_space_size) - 2
+            random_fitness_list, random_options = self.eval_solutions(fitness_function, random_solutions)
 
-                # fitness_list, options = self.eval_solutions(fitness_function, mdp_parameters, solutions)
+            # xbest = self.solver.result.xbest
+            # fbest = self.solver.result.fbest
 
-                # udpate the new mutated individuals
-                invalids = [ind for ind in population if not ind.fitness.valid]
-                fitness_list = list(self._toolbox.map(self._toolbox.evaluate, invalids))
+            # xbest = np.array(list(hall_of_fame[0]))
+            best_element = hall_of_fame[0]
+            fbest = best_element.fitness.values[0]
+            best_options = best_element.statistics['options']
 
-                # self.solver.tell(solutions, -fitness_list, copy=True)
-                for ind, fit in zip(invalids, fitness_list):
-                    ind.fitness.values = (fit[0],)
-                    ind.statistics['options'] = fit[1]
+            random_best = max(random_best, float(random_fitness_list.max()))
+            assert random_best >= old_random_best
+            old_random_best = random_best
 
-                hall_of_fame.update(population)
+            stats = self.statistics.compile(population)
 
-                random_solutions = np.random.randn(self.population_size, self.reward_space_size) - 2
-                random_fitness_list, random_options = self.eval_solutions(fitness_function, random_solutions)
+            config.tensorboard.add_scalar('optimization/mean', stats['mean'], optimization_iteration)
+            config.tensorboard.add_scalar('optimization/min', stats['min'], optimization_iteration)
+            config.tensorboard.add_scalar('optimization/max', stats['max'], optimization_iteration)
+            config.tensorboard.add_scalar('optimization/std', stats['std'], optimization_iteration)
+            config.tensorboard.add_scalar('optimization/best', fbest, optimization_iteration)
+            config.tensorboard.add_scalar('optimization/nr_options_best', len(best_options), optimization_iteration)
+            # config.tensorboard.add_histogram('optimization/sigmas', self.solver.sm.variances, optimization_iteration)
 
-                # xbest = self.solver.result.xbest
-                # fbest = self.solver.result.fbest
+            config.tensorboard.add_scalar('optimization/random_mean', random_fitness_list.mean(), optimization_iteration)
+            config.tensorboard.add_scalar('optimization/random_min', random_fitness_list.min(), optimization_iteration)
+            config.tensorboard.add_scalar('optimization/random_max', random_fitness_list.max(), optimization_iteration)
+            # config.tensorboard.add_scalar('optimization/random_var', random_fitness_list.var(), optimization_iteration)
+            config.tensorboard.add_scalar('optimization/random_best', random_best, optimization_iteration)
 
-                # xbest = np.array(list(hall_of_fame[0]))
-                best_element = hall_of_fame[0]
-                fbest = best_element.fitness.values[0]
-                best_options = best_element.statistics['options']
+            config.tensorboard.add_scalar('optimization/baseline', baseline, optimization_iteration)
 
-                random_best = max(random_best, float(random_fitness_list.max()))
-                assert random_best >= old_random_best
-                old_random_best = random_best
-
-                stats = self.statistics.compile(population)
-
-                summary_writer.add_scalar('optimization/mean', stats['mean'], optimization_iteration)
-                summary_writer.add_scalar('optimization/min', stats['min'], optimization_iteration)
-                summary_writer.add_scalar('optimization/max', stats['max'], optimization_iteration)
-                summary_writer.add_scalar('optimization/std', stats['std'], optimization_iteration)
-                summary_writer.add_scalar('optimization/best', fbest, optimization_iteration)
-                summary_writer.add_scalar('optimization/nr_options_best', len(best_options), optimization_iteration)
-                # summary_writer.add_histogram('optimization/sigmas', self.solver.sm.variances, optimization_iteration)
-
-                summary_writer.add_scalar('optimization/random_mean', random_fitness_list.mean(),
-                                          optimization_iteration)
-                summary_writer.add_scalar('optimization/random_min', random_fitness_list.min(), optimization_iteration)
-                summary_writer.add_scalar('optimization/random_max', random_fitness_list.max(), optimization_iteration)
-                # summary_writer.add_scalar('optimization/random_var', random_fitness_list.var(), optimization_iteration)
-                summary_writer.add_scalar('optimization/random_best', random_best, optimization_iteration)
-
-                summary_writer.add_scalar('optimization/baseline', baseline, optimization_iteration)
-
-                if old_fbest != fbest:
-                    old_fbest = fbest
+            if old_fbest != fbest:
+                old_fbest = fbest
 
         return None, None
 
     def get_best_option_score(self):
-        options = [learners.approx_q_learning.generate_option(config.main.environment(), (4, 4, 0), False), ]
+        # options = [learners.approx_q_learning.generate_option(config.environment(), (4, 4, 0), False), ]
+        # options = [learners.approx_q_learning.generate_option(config.environment(), (6, 6, 0), False), ]
         print("eval options", str(sorted([str(o) for o in options]))[:50], end=' ')
         fitness = utils.eval_options(envs.minigrid.MiniGrid(), options)
-        print(config.main.option_eval_training_steps, fitness)
+        print(config.option_eval_training_steps, fitness)
         return fitness
 
     def eval_solutions(self, fitness_function, solutions):

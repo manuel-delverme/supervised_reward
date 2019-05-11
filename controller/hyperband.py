@@ -28,7 +28,7 @@ class HyperBand(object):
         # total number of iterations (w/o reuse) per execution of Successive Halving (n,r)
         iteration_per_halving = (num_successive_havings + 1) * max_iter
 
-        with tensorboardX.SummaryWriter(log_dir, flush_secs=5) as summary_writer:
+        with tensorboardX.SummaryWriter(log_dir, flush_secs=5) as config.tensorboard:
 
             # Begin Finite Horizon Hyperband outlerloop. Repeat indefinitely.
             for s in reversed(range(num_successive_havings + 1)):
