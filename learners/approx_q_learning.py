@@ -6,6 +6,8 @@ import sklearn.kernel_approximation
 import sklearn.linear_model
 import sklearn.pipeline
 import sklearn.preprocessing
+import torch.nn
+import torch.optim
 import tqdm
 
 import config
@@ -64,51 +66,70 @@ class FeatureTransformer:
         return self.featurizer.transform(observations.astype(np.float))
 
 
-class Estimator:
+class LinearRegressionModel(torch.nn.Module):
+    def __init__(self):
+        super(LinearRegressionModel, self).__init__()
+        self.linear = torch.nn.Linear(36, 1)
+
+    def forward(self, x):
+        y_pred = self.linear(x)
+        return y_pred
+
+
+class PytorchEstimator:
     def __init__(self, action_size: int, alpha: float):
         self.models = []
-        self.not_trained = []
-        # self.feature_transformer = FeatureTransformer()
+        self.optimizers = []
         self.alpha = alpha
+        self.criterion = torch.nn.MSELoss()
 
         for _ in range(action_size):
             self.add_new_action()
 
     def add_new_action(self):
-        model = sklearn.linear_model.SGDRegressor(learning_rate='constant', eta0=self.alpha)
+        model = LinearRegressionModel()
+        optimizer = torch.optim.SGD(model.parameters(), lr=self.alpha)
+        # TODO: init small weights
+
         self.models.append(model)
-        self.not_trained.append(True)
+        self.optimizers.append(optimizer)
 
     def predict(self, observation, action=None):
         assert action is None or action > -1
         features = self.preprocess(observation)
 
-        if (action is None and any(self.not_trained)) or (action is not None and not self.not_trained[action]):
-            return [-random.random() / 1000 for _ in self.models]
         if not action:
             prediction = []
-            for m in self.models:
-                p = m.predict(features)
+            for model in self.models:
+                p = model(features)
                 prediction.append(p[0])
-            return np.array(prediction)
+            prediction = np.array(prediction)
         else:
-            return self.models[action].predict(features)[0]
+            prediction = self.models[action](features)
+        return prediction
 
     def update(self, observation, a, target):
-        iters = 10 if target > 0.1 else 1
-        for _ in range(iters):
-            features = self.preprocess(observation)
-            self.models[a].partial_fit(features, [target])
-            if self.not_trained[a]:
-                self.models[a].coef_ = (np.random.randn(*self.models[a].coef_.shape) * 0.0001)
-            self.not_trained[a] = False
+        target = torch.FloatTensor([target]).unsqueeze(-1)
+
+        optimizer = self.optimizers[a]
+        model = self.models[a]
+        features = self.preprocess(observation)
+
+        # for _ in range(iters):
+        optimizer.zero_grad()
+
+        pred = model(features)
+        loss = self.criterion(pred, target)
+        loss.backward()
+
+        optimizer.step()
 
     def preprocess(self, observation):
         # features = np.array(observation).reshape(1, -1)
         features = observation.reshape(1, -1)
         # features = self.feature_transformer.transform(observation)
         assert len(features.shape) == 2  # reshape(1, -1)
-        return features
+        return torch.FloatTensor(features)
 
     # end update
 
@@ -125,9 +146,6 @@ class Estimator:
             return np.argmax(self.predict(s))
     # end sample_action
 
-
-# class ApproxQLearning(object):
-#     def __init__(self, env, options=None, epsilon=0.1, gamma=0.90, alpha=0.2, surrogate_reward=None, goal=None):
 
 def pick_action_test(state, old_action_idx, old_primitive_action, is_option, nr_primitive_actions=None, available_actions=None, estimator=None):
     return pick_action(state, old_action_idx, old_primitive_action, is_option, nr_primitive_actions=nr_primitive_actions, available_actions=available_actions, estimator=estimator,
@@ -171,7 +189,8 @@ def td_update(estimator, state, action_idx, reward, future_reward):
 def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.alpha, surrogate_reward=None, goal=None, generate_options=False, terminate_on_surr_reward=False,
           training_steps=None,
           replace_reward=config.replace_reward, generate_on_rw=config.generate_on_rw, use_learned_options=config.use_learned_options, eval_fitness=True, ):
-    estimator = Estimator(environment.action_space.n + len(options or []), alpha)
+    estimator = PytorchEstimator(environment.action_space.n + len(options or []), alpha)
+    # estimator = Estimator(environment.action_space.n + len(options or []), alpha)
     nr_primitive_actions = environment.action_space.n
     available_actions = list(range(nr_primitive_actions))
     action_size = environment.action_space.n
@@ -264,7 +283,6 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.al
                     distance = min(distance, cell_distance)
 
                 reward -= distance / 100
-
 
             reward, terminal = update_reward(info, new_state, replace_reward, reward, terminal, terminate_on_surr_reward, surrogate_reward)
 
