@@ -1,5 +1,3 @@
-import enum
-
 import gym
 import gym.spaces
 # noinspection PyUnresolvedReferences
@@ -14,19 +12,24 @@ def to_tuple(img):
     return b
 
 
-class MiniGrid(gym.Env):
-
+class _MiniGrid(gym.Env):
     def __init__(self, *task_parameters):
+        super().__init__()
         del task_parameters
         self._env_name = config.env_name
         self.env = gym.make(self._env_name)
-        self.env.max_steps = config.max_env_steps
+        if config.max_env_steps is not None:
+            self.env.max_steps = config.max_env_steps
         self.env.see_trough_walls = True
+        self._observation_space = None
 
     def encode_observation(self, obs):
         image = obs['image']
-        info_map = np.zeros(shape=(*obs['image'].shape[:-1], 4))
 
+        doors = image[:, :, 0] == 4  # door
+        opens = np.logical_not(image[:, :, 2])  # door
+
+        info_map = np.zeros(shape=(*obs['image'].shape[:-1], 4))
         # empty # floor; where you can go
         info_map[:, :, 0] = np.logical_or(image[:, :, 0] == 3, image[:, :, 0] == 1, image[:, :, 0] == 8)
 
@@ -34,8 +37,6 @@ class MiniGrid(gym.Env):
         info_map[:, :, 1] = np.logical_or(image[:, :, 0] == 2, image[:, :, 0] == 0)
 
         # info_map[:, :, 0] = np.logical_or(info_map[:, :, 0], image[:, :, 0] == 3)
-        doors = image[:, :, 0] == 4  # door
-        opens = np.logical_not(image[:, :, 2])  # door
         # you can go in open doors
         info_map[:, :, 0][np.logical_and(doors, opens)] = 1
         # you can not go in open doors
@@ -47,6 +48,7 @@ class MiniGrid(gym.Env):
         assert info_map.max() == 1 and info_map.min() == 0
 
         # in theory 1 and 2 are complementary, so they could be skipped
+        info_map[:, :, 1] = np.logical_or(image[:, :, 0] == 2, image[:, :, 0] == 0)
         return info_map
 
     @property
@@ -60,8 +62,10 @@ class MiniGrid(gym.Env):
 
     @property
     def observation_space(self):
-        # x, y, orientation
-        return gym.spaces.discrete.Discrete(149)
+        if self._observation_space is None:
+            ob = self.reset()
+            self._observation_space = gym.spaces.discrete.Discrete(*ob.ravel().shape)
+        return self._observation_space
 
     def step(self, action):
         assert 0 <= action <= 4
@@ -90,3 +94,64 @@ class MiniGrid(gym.Env):
 
     def __str__(self):
         return self.__repr__()
+
+
+class MiniGrid(_MiniGrid):
+    def __init__(self, *task_parameters):
+        self.ob_rms = False
+        super().__init__(*task_parameters)
+        clipob = 10.
+        cliprew = 10.
+        gamma = 0.99
+        epsilon = 1e-8
+
+        self.training = True
+        obs = self.reset()
+        # self.ob_rms = RunningMeanStd(shape=obs.shape)
+        # self.ret_rms = RunningMeanStd(shape=())
+        self.ret_rms = False
+        self.clipob = clipob
+        self.cliprew = cliprew
+        self.ret = 0
+        self.gamma = gamma
+        self.epsilon = epsilon
+
+    def step(self, action):
+        obs, rew, done, info = super().step(action)
+
+        self.ret = self.ret * self.gamma + rew
+        obs = self._obfilt(obs)
+        if self.ret_rms:
+            self.ret_rms.update(np.array([self.ret]))
+            rew = np.clip(rew / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)
+
+        if done:
+            self.ret = 0.
+        return obs, rew, done, info
+
+    def _obfilt(self, obs):
+        if not self.ob_rms:
+            return obs
+
+        if self.training:
+            self.ob_rms.update(obs)
+        obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
+        return obs
+
+    def reset(self):
+        obs = super().reset()
+        return self._obfilt(obs)
+
+    def train(self):
+        self.training = True
+
+    def eval(self):
+        self.training = False
+
+    def reset(self):
+        """
+        Reset all environments
+        """
+        obs = super().reset()
+        filtered_obs = self._obfilt(obs)
+        return filtered_obs

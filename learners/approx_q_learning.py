@@ -6,7 +6,7 @@ import sklearn.kernel_approximation
 import sklearn.linear_model
 import sklearn.pipeline
 import sklearn.preprocessing
-import torch.nn
+import torch.nn as nn
 import torch.optim
 import tqdm
 
@@ -66,29 +66,36 @@ class FeatureTransformer:
         return self.featurizer.transform(observations.astype(np.float))
 
 
-class LinearRegressionModel(torch.nn.Module):
-    def __init__(self):
+class LinearRegressionModel(nn.Module):
+    def __init__(self, nr_inputs):
         super(LinearRegressionModel, self).__init__()
-        self.linear = torch.nn.Linear(36, 1)
+        # self.feats = nn.Sequential(nn.Conv2d(4, 1, (3, 3)))
+        self.reg = nn.Linear(nr_inputs, 1)
+        # torch.nn.Linear(nr_inputs, 1),
 
     def forward(self, x):
-        y_pred = self.linear(x)
+        # feat = self.feats(x)
+        # feat = feat.reshape(x.size(0), -1)
+        x = x.reshape(x.size(0), -1)
+        # feat = torch.cat((feat, x), dim=1)
+        feat = x
+        y_pred = self.reg(feat)
         return y_pred
 
 
 class PytorchEstimator:
-    def __init__(self, action_size: int, alpha: float):
+    def __init__(self, action_size: int, observation_size: int):
         self.models = []
         self.optimizers = []
-        self.alpha = alpha
-        self.criterion = torch.nn.MSELoss()
+        self.criterion = nn.MSELoss()
+        self.nr_inputs = observation_size
 
         for _ in range(action_size):
             self.add_new_action()
 
     def add_new_action(self):
-        model = LinearRegressionModel()
-        optimizer = torch.optim.SGD(model.parameters(), lr=self.alpha)
+        model = LinearRegressionModel(nr_inputs=self.nr_inputs).to(config.device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
         # TODO: init small weights
 
         self.models.append(model)
@@ -109,7 +116,7 @@ class PytorchEstimator:
         return prediction
 
     def update(self, observation, a, target):
-        target = torch.FloatTensor([target]).unsqueeze(-1)
+        target = torch.FloatTensor([target]).unsqueeze(-1).to(config.device)
 
         optimizer = self.optimizers[a]
         model = self.models[a]
@@ -125,11 +132,9 @@ class PytorchEstimator:
         optimizer.step()
 
     def preprocess(self, observation):
-        # features = np.array(observation).reshape(1, -1)
-        features = observation.reshape(1, -1)
-        # features = self.feature_transformer.transform(observation)
-        assert len(features.shape) == 2  # reshape(1, -1)
-        return torch.FloatTensor(features)
+        # features = observation.reshape(1, -1)
+        features = torch.FloatTensor(observation).unsqueeze(0).permute(0, 3, 1, 2).to(config.device)
+        return features
 
     # end update
 
@@ -154,7 +159,7 @@ def pick_action_test(state, old_action_idx, old_primitive_action, is_option, nr_
 
 def pick_action(observation, old_action_idx, old_primitive_action, is_option, *, exploit=False, epsilon=None, nr_primitive_actions=None, available_actions=None, estimator=None):
     was_option = is_option(old_action_idx)
-    config.tensorboard.add_scalar('learning/was_option', was_option)
+    # config.tensorboard.add_scalar('learning/was_option', was_option)
 
     if not was_option or old_primitive_action == TERMINATE_OPTION:
         if exploit or epsilon < random.random():
@@ -186,11 +191,10 @@ def td_update(estimator, state, action_idx, reward, future_reward):
     # discounted_reward = discounted_reward_under_option + reward * (gamma ** time_difference)
 
 
-def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.alpha, surrogate_reward=None, goal=None, generate_options=False, terminate_on_surr_reward=False,
+def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, surrogate_reward=None, goal=None, generate_options=False, terminate_on_surr_reward=False,
           training_steps=None,
           replace_reward=config.replace_reward, generate_on_rw=config.generate_on_rw, use_learned_options=config.use_learned_options, eval_fitness=True, ):
-    estimator = PytorchEstimator(environment.action_space.n + len(options or []), alpha)
-    # estimator = Estimator(environment.action_space.n + len(options or []), alpha)
+    estimator = PytorchEstimator(environment.action_space.n + len(options or []), observation_size=environment.observation_space.n)
     nr_primitive_actions = environment.action_space.n
     available_actions = list(range(nr_primitive_actions))
     action_size = environment.action_space.n
@@ -268,7 +272,11 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.al
 
         else:
             new_state, reward, terminal, info = environment.step(available_actions[primitive_action])
+            if environment.ob_rms:
+                config.tensorboard.add_scalar('learning/obmean', environment.ob_rms.mean.mean(), step)
+                config.tensorboard.add_scalar('learning/obvar', environment.ob_rms.var.mean(), step)
             fitness += 1 if reward > 0 else 0
+            config.tensorboard.add_scalar('learning/real_reward', reward, step)
 
             if config.shape_reward:
                 next_cells = [
@@ -285,9 +293,9 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, alpha=config.al
                 reward -= distance / 100
 
             reward, terminal = update_reward(info, new_state, replace_reward, reward, terminal, terminate_on_surr_reward, surrogate_reward)
+            config.tensorboard.add_scalar('learning/received_reward', reward, step)
 
             cumulative_reward += reward
-            config.tensorboard.add_scalar('learning/reward', reward, step)
             config.tensorboard.add_scalar('learning/cum_reward', cumulative_reward, step)
 
             if terminal:

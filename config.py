@@ -3,8 +3,9 @@ import sys
 import time
 
 import tensorboardX
+import torch
 
-agent_view_size = 3  # 7
+agent_view_size = 5  # 7
 import envs.minigrid
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
@@ -15,6 +16,8 @@ environment = envs.minigrid.MiniGrid
 # env_name = 'MiniGrid-Empty-6x6-v0'
 # env_name = 'MiniGrid-Empty-8x8-v0'
 env_name = 'MiniGrid-MultiRoom-N2-S4-v0'
+# env_name = 'MiniGrid-MultiRoom-N2-S6-v0'
+# env_name = 'MiniGrid-MultiRoom-N6-v0' # impossible
 
 population = 5
 
@@ -50,7 +53,6 @@ else:
     option_eval_test_steps = 1000
     evolution_iters = 100000
 
-side_size = 7
 # main.env_name = "debug"
 # env_name = "boxes"
 # env_name = "hungry-thirsty"
@@ -64,11 +66,13 @@ tensorboard.add_custom_scalars({
 })
 
 option_train_steps = 10 if DEBUG else 10000
-alpha = 0.01
+learning_rate = 0.001
 
 generate_on_rw = True
 replace_reward = False
 use_learned_options = False
 visualize_learning = True
-shape_reward = True
-max_env_steps = 1000
+shape_reward = False
+max_env_steps = None
+device = torch.device('cuda:0')
+compact_observation = False
