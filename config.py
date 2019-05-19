@@ -11,13 +11,13 @@ import envs.minigrid
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
 # DEBUG = False
 print('DEBUG:', DEBUG)
-
 environment = envs.minigrid.MiniGrid
 # env_name = 'MiniGrid-Empty-6x6-v0'
 # env_name = 'MiniGrid-Empty-8x8-v0'
 env_name = 'MiniGrid-MultiRoom-N2-S4-v0'
 # env_name = 'MiniGrid-MultiRoom-N2-S6-v0'
 # env_name = 'MiniGrid-MultiRoom-N6-v0' # impossible
+
 
 population = 5
 
@@ -35,23 +35,21 @@ if not DEBUG:
 
 repeat_eval_options = 1 if DEBUG else 1
 
+
+fitness_training_steps = None
+eval_test_restarts = 1  # 0
+option_discovery_steps = 1000
+option_eval_training_steps = 10000
+option_eval_test_steps = 1000
+evolution_iters = 100000
+
 if DEBUG:
     eval_test_restarts = 1
-    training_steps = 400
-    option_discovery_steps = -1
-    option_eval_training_steps = 10000
-    option_eval_test_steps = 200
+    option_discovery_steps //= 100
+    option_eval_training_steps //= 1000
+    option_eval_test_steps //= 1000
     evolution_iters = 10
     experiment_id += 'DEBUG'
-    fitness_training_steps = None
-else:
-    fitness_training_steps = None
-    eval_test_restarts = 1  # 0
-    # training_steps = 1000  # 0
-    option_discovery_steps = 10000
-    option_eval_training_steps = 50000
-    option_eval_test_steps = 1000
-    evolution_iters = 100000
 
 # main.env_name = "debug"
 # env_name = "boxes"
@@ -65,14 +63,16 @@ tensorboard.add_custom_scalars({
                               ['optimization/baseline', 'optimization/mean', 'optimization/random_mean']]},
 })
 
-option_train_steps = 10 if DEBUG else 10000
+option_train_steps = 10 if DEBUG else 1000
 learning_rate = 0.001
 
 generate_on_rw = True
 replace_reward = False
 use_learned_options = False
-visualize_learning = True
 shape_reward = False
 max_env_steps = None
-device = torch.device('cuda:0')
+# device = torch.device('cuda:0')
+device = torch.device('cpu')
 compact_observation = False
+
+visualize_learning = True

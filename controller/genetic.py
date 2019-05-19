@@ -4,6 +4,7 @@ import deap.algorithms
 import deap.base
 import deap.creator
 import deap.tools
+import gym
 import numpy as np
 import tqdm
 
@@ -23,13 +24,12 @@ def fitness_function(reward_vector):
         reward_vector = np.array(reward_vector)
         generate_options = True
 
-        def intrinsic_reward_function(state, info):
-
-            image = info['original_observation']['image'][:, :, 0].ravel()
+        def intrinsic_reward_function(observation, info):
+            image = observation.ravel()
             return reward_vector[:-1].dot(image) + reward_vector[-1]
 
     # draw training environment
-    mdp = envs.minigrid.MiniGrid()
+    mdp = config.environment()
 
     if intrinsic_reward_function is None:
         options = []
@@ -45,10 +45,11 @@ def fitness_function(reward_vector):
 
 
 class GeneticEvolution(object):
-    def __init__(self, reward_space_size, population_size=config.population):
+    def __init__(self, population_size=config.population):
         print("init")
         self.population_size = population_size
-        self.reward_space_size = reward_space_size
+
+        reward_space_size = config.environment().reset().ravel().shape[0] + 1
 
         deap.creator.create('FitnessMax', deap.base.Fitness, weights=(1.0,))
         deap.creator.create('Individual', list, fitness=deap.creator.FitnessMax, statistics=dict)
@@ -67,8 +68,7 @@ class GeneticEvolution(object):
         self._toolbox.register("map", map)
 
         self._toolbox.register("attr_init", lambda: (np.random.randn() - (2 / reward_space_size)))
-        self._toolbox.register("individual", deap.tools.initRepeat, deap.creator.Individual, self._toolbox.attr_init,
-                               n=reward_space_size)
+        self._toolbox.register("individual", deap.tools.initRepeat, deap.creator.Individual, self._toolbox.attr_init, n=reward_space_size)
         # self._toolbox.register("select", deap.tools.selBest, k=3)
         self._toolbox.register("select", deap.tools.selTournament, k=population_size, tournsize=3)
         self._toolbox.register('population', deap.tools.initRepeat, list, self._toolbox.individual)
@@ -78,9 +78,10 @@ class GeneticEvolution(object):
         self.statistics.register("mean", np.mean)
         self.statistics.register("min", np.min)
         self.statistics.register("std", np.std)
+        self.reward_space_size = reward_space_size
         print("init done")
 
-    def optimize(self, n_iterations=config.evolution_iters):
+    def optimize(self, experiment_id):
         self._toolbox.register("evaluate", fitness_function)
         hall_of_fame = deap.tools.HallOfFame(maxsize=10)
         old_fbest = -float('inf')
@@ -90,8 +91,8 @@ class GeneticEvolution(object):
         cxpb, mutpb = 0.5, 0.2
         population = self._toolbox.population(n=self.population_size)
 
-        # if config.DEBUG:
-        #     _ = fitness_function(population[0])  # raise errors
+        if config.DEBUG:
+            _ = fitness_function(population[0])  # raise errors
 
         # fitness = self.get_best_option_score()
         # print(fitness)
@@ -99,14 +100,14 @@ class GeneticEvolution(object):
         print('eval baseline: ', end='')
         baseline, _ = fitness_function(None)
         print(baseline)
-        raise NotImplementedError
+        raise Exception
 
         fitness_list = self._toolbox.map(self._toolbox.evaluate, population)
         for ind, fit in zip(population, fitness_list):
             ind.fitness.values = (fit[0],)
             ind.statistics['options'] = fit[1]
 
-        for optimization_iteration in tqdm.tqdm(range(n_iterations), desc="optimization"):
+        for optimization_iteration in tqdm.tqdm(range(config.evolution_iters), desc="optimization"):
 
             # solutions = self.solver.ask(number=self.population_size)
             selected_solutions = self._toolbox.select(population)  # , k=len(population))

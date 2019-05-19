@@ -11,7 +11,7 @@ import torch.optim
 import tqdm
 
 import config
-from utils import disk_utils
+from utils import disk_utils, utils
 
 TERMINATE_OPTION = -1
 
@@ -206,8 +206,6 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, surrogate_rewar
         for option in options:
             action_to_id[option] = len(action_to_id)
 
-    surrogate_reward = surrogate_reward
-
     def make_is_option(num_actions):
         def is_option(action):
             return action is not None and action >= num_actions
@@ -254,7 +252,7 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, surrogate_rewar
         else:
             config.tensorboard.add_scalar('learn/option_taken', 0, step)
 
-        if config.visualize_learning and step > (training_steps - 100):
+        if config.visualize_learning and step > (training_steps - 1000):
             environment.render(reward=reward, step=step)
             time.sleep(0.3)
             # if terminal:
@@ -337,7 +335,7 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, surrogate_rewar
         else:
             option_gen_metric = delta_Q
 
-        if generate_options and option_gen_metric > 0 and tuple(old_state) not in option_goals:
+        if generate_options and option_gen_metric > 0 and utils.to_tuple(old_state) not in option_goals:
             # reward = self.surrogate_reward(self.environment)
             # goal = self.environment.agent_position_idx
             new_option = generate_option(environment, old_state, use_learned_options)
@@ -476,7 +474,7 @@ def learn_option(goal, mdp, training_steps=config.option_train_steps):  # reduce
     goal = tuple(goal)
 
     def surrogate_reward(state, info):
-        if goal == state:
+        if goal == utils.to_tuple(state):
             return 1
         else:
             dist = abs(goal[0] - state[0]) + abs(goal[1] - state[1]) + abs(goal[2] - state[2]) * 0.01

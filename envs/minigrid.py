@@ -7,11 +7,6 @@ import numpy as np
 import config
 
 
-def to_tuple(img):
-    b = tuple(tuple(tuple(column) for column in row) for row in img)
-    return b
-
-
 class _MiniGrid(gym.Env):
     def __init__(self, *task_parameters):
         super().__init__()
@@ -72,7 +67,6 @@ class _MiniGrid(gym.Env):
         if action == 3:
             action = 5
         obs, reward, done, info = self.env.step(action)
-        # info['original_observation'] = obs
         return self.encode_observation(obs), reward, done, info
 
     def reset(self):

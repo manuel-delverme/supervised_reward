@@ -5,8 +5,7 @@ import controller.meta_controller
 
 
 def main():
-    reward_space_size = (config.agent_view_size * config.agent_view_size) + 1
-    regressor = controller.genetic.GeneticEvolution(reward_space_size=reward_space_size, )
+    regressor = controller.genetic.GeneticEvolution()
     regressor.optimize(config.experiment_id)
 
 

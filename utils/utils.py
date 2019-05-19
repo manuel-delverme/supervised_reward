@@ -24,3 +24,8 @@ def print_statistics(fitness, options):
         option_names.append(int(np.argwhere(option == -1)[0]))
     option_names = " ".join(str(n) for n in sorted(option_names))
     print("score:\t{}\toptions: {}\t{}".format(fitness, len(options), option_names))
+
+
+def to_tuple(img):
+    b = tuple(tuple(tuple(column) for column in row) for row in img)
+    return b
