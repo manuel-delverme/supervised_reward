@@ -34,7 +34,7 @@ class _MiniGrid(gym.Env):
         # info_map[:, :, 0] = np.logical_or(info_map[:, :, 0], image[:, :, 0] == 3)
         # you can go in open doors
         info_map[:, :, 0][np.logical_and(doors, opens)] = 1
-        # you can not go in open doors
+        # you can not go in not open doors
         info_map[:, :, 1][np.logical_and(doors, np.logical_not(opens))] = 1
         # you can interact with closed doors
         info_map[:, :, 2] = np.logical_and(doors, np.logical_not(opens))
@@ -44,6 +44,8 @@ class _MiniGrid(gym.Env):
 
         # in theory 1 and 2 are complementary, so they could be skipped
         info_map[:, :, 1] = np.logical_or(image[:, :, 0] == 2, image[:, :, 0] == 0)
+        assert info_map[:, :, 3].sum() <= 1
+        info_map.flags.writeable = False
         return info_map
 
     @property

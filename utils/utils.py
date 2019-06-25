@@ -1,8 +1,8 @@
+import matplotlib.pyplot as plt
 import numpy as np
 
 import config
 import learners.approx_q_learning
-from utils import disk_utils
 
 
 def eval_options(env, options):
@@ -29,3 +29,12 @@ def print_statistics(fitness, options):
 def to_tuple(img):
     b = tuple(tuple(tuple(column) for column in row) for row in img)
     return b
+
+
+def plot_intinsic_motivation(motivating_function, old_state, step):
+    plottable_reward = motivating_function[:-1].reshape(old_state)
+    for layer in range(plottable_reward.shape[2]):
+        figure, axes = plt.figure(figsize=plottable_reward.shape[:-1], dpi=1), plt.gca()
+        axes.matshow(plottable_reward[:, :, layer], vmax=2, vmin=-2, interpolation='nearest')
+        axes.axis('off')
+        config.tensorboard.add_figure(f'motivating_functions/{layer}', figure, global_step=step, close=True)

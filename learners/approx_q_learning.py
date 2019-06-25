@@ -1,7 +1,7 @@
-import random
 import time
 
 import numpy as np
+import random
 import sklearn.kernel_approximation
 import sklearn.linear_model
 import sklearn.pipeline
@@ -11,27 +11,40 @@ import torch.optim
 import tqdm
 
 import config
-from utils import disk_utils, utils
+from utils import utils
 
 TERMINATE_OPTION = -1
 
 
+def hash_image(image):
+    return image.data.tobytes()
+
+
 class CachedPolicy:
-    def __init__(self, estimator):
+    def __init__(self, estimator, goal=None):
         self.estimator = estimator
         self.cache = {}
+        self.goal = goal
 
-    def __setitem__(self, key, value):
-        self.cache[tuple(key)] = value
+    def __setitem__(self, obs_hash, value):
+        obs_hash = hash_image(obs_hash)
+        self.cache[obs_hash] = value
 
-    def __getitem__(self, item):
-        if item not in self.cache:
-            q_values = self.estimator.predict(item)
+    def __getitem__(self, image):
+        if self.goal is not None:
+            if self.goal(image.ravel()) > 0:
+                return -1
+
+        obs_hash = hash_image(image)
+        if obs_hash not in self.cache:
+            q_values = self.estimator.predict(image)
             action_idx = int(np.argmax(q_values))
-            self.cache[item] = action_idx
-        return self.cache[item]
+            self.cache[obs_hash] = action_idx
+        return self.cache[obs_hash]
 
     def __str__(self):
+        if self.goal is not None:
+            return 'intrinsic option'
         if not hasattr(self, 'name'):
             for k, v in self.cache.items():
                 if v == -1:
@@ -191,7 +204,7 @@ def td_update(estimator, state, action_idx, reward, future_reward):
     # discounted_reward = discounted_reward_under_option + reward * (gamma ** time_difference)
 
 
-def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, surrogate_reward=None, goal=None, generate_options=False, terminate_on_surr_reward=False,
+def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, surrogate_reward=None, generate_options=False, terminate_on_surr_reward=False,
           training_steps=None,
           replace_reward=config.replace_reward, generate_on_rw=config.generate_on_rw, use_learned_options=config.use_learned_options, eval_fitness=True, ):
     estimator = PytorchEstimator(environment.action_space.n + len(options or []), observation_size=environment.observation_space.n)
@@ -237,7 +250,7 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, surrogate_rewar
     new_state = old_state
 
     # for step in range(training_steps):
-    for step in tqdm.tqdm(range(training_steps), desc="Training"):
+    for step in tqdm.tqdm(range(training_steps), desc="Training", disable=config.disable_tqdm):
         action_idx, primitive_action = pick_action(old_state, old_action_idx=action_idx, epsilon=epsilon, nr_primitive_actions=nr_primitive_actions,
                                                    available_actions=available_actions, estimator=estimator, old_primitive_action=primitive_action, is_option=is_option)
         config.tensorboard.add_histogram('learn/action_idx', action_idx, step)
@@ -338,8 +351,16 @@ def learn(environment, *, options=None, epsilon=0.1, gamma=0.90, surrogate_rewar
         if generate_options and option_gen_metric > 0 and utils.to_tuple(old_state) not in option_goals:
             # reward = self.surrogate_reward(self.environment)
             # goal = self.environment.agent_position_idx
-            new_option = generate_option(environment, old_state, use_learned_options)
-            option_goals.add(old_state)
+
+            motivating_function = np.einsum('s,s->s', surrogate_reward.reward_vector[:-1], old_state.ravel())
+            motivating_bias = surrogate_reward.reward_vector[-1]
+
+            def option_reward(state, info=None):
+                return motivating_function.dot(state.ravel()) + motivating_bias
+
+            new_option = generate_option(environment, option_reward, use_learned_options)
+
+            option_goals.add(old_state.data.tobytes())
             available_actions.append(new_option)
             estimator.add_new_action()
 
@@ -468,25 +489,36 @@ def is_terminate_option(skill, old_state):
     return skill[old_state] == -1
 
 
-@disk_utils.disk_cache
+# @disk_utils.disk_cache
 def learn_option(goal, mdp, training_steps=config.option_train_steps):  # reduced for 7x7
-    print("generating policy for goal:{}".format(goal))
-    goal = tuple(goal)
 
-    def surrogate_reward(state, info):
-        if goal == utils.to_tuple(state):
-            return 1
-        else:
-            dist = abs(goal[0] - state[0]) + abs(goal[1] - state[1]) + abs(goal[2] - state[2]) * 0.01
-            return -dist / 10
+    if hasattr(goal, '__call__'):
+        surrogate_reward = goal
+        goal = False
+    else:
+        print("generating policy for goal:{}".format(goal))
+        goal = tuple(goal)
+        surrogate_reward = f'GoTo {goal}'
 
-    _, _, fitnesses, estimator = learn(environment=mdp, options=None, surrogate_reward=surrogate_reward, goal=goal, training_steps=training_steps, terminate_on_surr_reward=True,
+        def surrogate_reward(state, info):
+            delta = goal - state
+            distance = np.linalg.norm(delta)
+            if not distance:
+                return 1
+            else:
+                return (1 / distance) / 10
+
+    _, _, fitnesses, estimator = learn(environment=mdp, options=None, surrogate_reward=surrogate_reward, training_steps=training_steps, terminate_on_surr_reward=True,
                                        replace_reward=True)
 
-    print('GOAL:', goal)
+    print('learned option for GOAL:', surrogate_reward)
     # learner.test(1000, render=True, terminate_on_surr_reward=True)
 
-    option = CachedPolicy(estimator)
-    option[goal] = -1
-    option.name = str(goal)
+    if not goal:
+        option = CachedPolicy(estimator, surrogate_reward)
+    else:
+        option = CachedPolicy(estimator)
+        option[goal] = -1
+        option.name = str(goal)
+
     return option
