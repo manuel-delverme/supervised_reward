@@ -16,6 +16,7 @@ agent_view_size = 5  # 7
 import envs.minigrid
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
+DEBUG = False
 print("DEBUG: ", DEBUG)
 
 experiment_name = "DEBUG:" + time.strftime("%Y_%m_%d-%H_%M_%S")
@@ -34,31 +35,33 @@ if not DEBUG and HASGUI:
     except tkinter.TclError as _:
         pass
 
+
+experiment_name = f'{response}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
 if len(sys.argv) > 1:
-    response = f'{sys.argv[1]}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
+    experiment_name = f'{sys.argv[1]}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
 
 repeat_eval_options = 1 if DEBUG else 1
 
-
 fitness_training_steps = None
 eval_test_restarts = 1  # 0
-option_discovery_steps = 1000
-option_eval_training_steps = 10000
-option_eval_test_steps = 1000
-evolution_iters = 100000
+option_discovery_steps = 10001
+option_eval_training_steps = 10002
+option_eval_test_steps = 1003
+evolution_iters = 100004
+option_train_steps = 2005
 
 if DEBUG:
     eval_test_restarts = 1
-    option_discovery_steps //= 100
-    option_eval_training_steps //= 1000
-    option_eval_test_steps //= 1000
+    option_train_steps = 10
+    option_discovery_steps //= 5
+    option_eval_training_steps //= 10
+    option_eval_test_steps //= 10
     evolution_iters = 10
 
 # main.env_name = "debug"
 # env_name = "boxes"
 # env_name = "hungry-thirsty"
 # env_name = "minigrid"
-option_train_steps = 10 if DEBUG else 1000
 learning_rate = 0.001
 
 generate_on_rw = True
@@ -68,8 +71,8 @@ shape_reward = False
 max_env_steps = None
 compact_observation = False
 
-visualize_learning = False
-disable_tqdm = True
+visualize_learning = True
+disable_tqdm = False
 
 environment = envs.minigrid.MiniGrid
 # env_name = 'MiniGrid-Empty-6x6-v0'
@@ -83,3 +86,6 @@ population = 2
 
 print('EXPERIMENT:', experiment_name)
 tensorboard = tensorboardX.SummaryWriter(os.path.join('runs', experiment_name), flush_secs=1)
+enjoy = False
+enjoy_option = False
+learn_epsilon = 0.2

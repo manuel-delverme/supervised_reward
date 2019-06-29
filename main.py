@@ -1,93 +1,39 @@
-# import deap.algorithms
-# import deap.base
-# import deap.creator
-# import deap.tools
 import numpy as np
-import operator
 import tqdm
 
 import config
 import envs.boxes
 import envs.hungry_thirsty
 import envs.minigrid
-import learners.approx_q_learning
-import learners.approx_q_learning
 import utils.utils
+from fitness import fitness_function
 from utils import utils
-
-
-def fitness_function(reward_vector):
-    if reward_vector is None:
-        intrinsic_reward_function = None
-        generate_options = False
-    else:
-        reward_vector = np.array(reward_vector)
-        generate_options = True
-
-        def intrinsic_reward_function(observation, info):
-            image = observation.ravel()
-            return reward_vector[:-1].dot(image) + reward_vector[-1]
-
-        intrinsic_reward_function.reward_vector = reward_vector
-
-    # draw training environment
-    mdp = config.environment()
-
-    if intrinsic_reward_function is None:
-        options = []
-    else:
-        # generate options in that
-        options, _, _, _ = learners.approx_q_learning.learn(environment=mdp, surrogate_reward=intrinsic_reward_function, training_steps=config.option_discovery_steps,
-                                                            generate_options=generate_options, eval_fitness=False)
-
-    print("discovered option set", str(sorted([str(o) for o in options]))[:100], "evaluating it", end=' ')
-    fitness = utils.eval_options(envs.minigrid.MiniGrid(), options)
-    print(fitness)
-    return fitness, options
 
 
 class Search(object):
     def __init__(self, population_size=config.population):
         print("init")
         self.population_size = population_size
-        reward_space_size = config.environment().reset().ravel().shape[0]
-
-        deap.creator.create('FitnessMax', deap.base.Fitness, weights=(1.0,))
-        deap.creator.create('Individual', list, fitness=deap.creator.FitnessMax, statistics=dict)
-
-        self._toolbox = deap.base.Toolbox()
-        self._toolbox.register('mate', deap.tools.cxTwoPoint)
-        self._toolbox.register('mutate', deap.tools.mutGaussian, mu=0.0, sigma=0.1, indpb=0.2)
-
-        self._toolbox.register("map", map)
-
-        self._toolbox.register("attr_init", lambda: (np.random.randn() - (2 / reward_space_size)))
-        self._toolbox.register("individual", deap.tools.initRepeat, deap.creator.Individual, self._toolbox.attr_init, n=reward_space_size)
-        self._toolbox.register("select", deap.tools.selTournament, k=population_size, tournsize=3)
-        self._toolbox.register('population', deap.tools.initRepeat, list, self._toolbox.individual)
-        self.statistics = deap.tools.Statistics(key=operator.attrgetter("fitness.values"))
-
-        self.statistics.register("max", np.max)
-        self.statistics.register("mean", np.mean)
-        self.statistics.register("min", np.min)
-        self.statistics.register("std", np.std)
+        _e = config.environment()
+        obs = _e.reset()
+        reward_space_size = obs.ravel().shape[0]
         self.reward_space_size = reward_space_size
         print("init done")
 
-    def optimize(self, experiment_id):
-        self._toolbox.register("evaluate", fitness_function)
-        hall_of_fame = deap.tools.HallOfFame(maxsize=10)
+    def optimize(self):
         old_fbest = -float('inf')
         random_best = -float('inf')
         old_random_best = -float('inf')
 
-        cxpb, mutpb = 0.5, 0.2
-        population = self._toolbox.population(n=self.population_size)
+        self.test_intuitive_cases(self.reward_space_size)
+        return
 
-        self.test_intuitive_cases(population)
+
+
         if config.DEBUG:
-            _ = fitness_function(population[0])  # raise errors
+            _ = fitness_function(self.random.randn(self.reward_space_size))  # raise errors
 
+        population = [np.random.randn(self.reward_space_size) for _ in range(config.population)]
         # fitness = self.get_best_option_score()
         # print(fitness)
 
@@ -96,7 +42,8 @@ class Search(object):
         # print(baseline)
         im_number = 0
 
-        fitness_list = self._toolbox.map(self._toolbox.evaluate, population)
+        fitness_list = map(fitness_function, population)
+
         for ind, fit in zip(population, fitness_list):
             utils.plot_intinsic_motivation(np.array(ind), (config.agent_view_size, config.agent_view_size, -1), im_number)
             im_number += 1
@@ -164,17 +111,32 @@ class Search(object):
         return None, None
 
     @staticmethod
-    def test_intuitive_cases(population):
-        door_motivation = np.ones_like(population[0]) * -0.01
-        door_motivation.reshape(config.agent_view_size, config.agent_view_size, -1)
-        door_motivation[:, :, 2] = 1
-        door_fitness = fitness_function(door_motivation)
-        print('fitness with door curiosity', door_fitness)
-        door_motivation = np.ones_like(population[0]) * -0.01
-        door_motivation.reshape(config.agent_view_size, config.agent_view_size, -1)
-        door_motivation[:, :, 2] = 0.1
-        door_motivation[2, 4, 2] = 1
-        better_doors_fitness = fitness_function(door_motivation)  # raise errors
+    def test_intuitive_cases(reward_space_size):
+        # door_motivation = np.ones(shape=reward_space_size) * -0.01
+
+        # door_motivation = door_motivation.reshape(config.agent_view_size, config.agent_view_size, -1)
+        # door_motivation[:, :, 2] = 1
+        # door_fitness = fitness_function(door_motivation.ravel())
+        # print('fitness with door curiosity', door_fitness)
+
+        door_motivation = np.ones(shape=reward_space_size) * -0.01
+        door_motivation = door_motivation.reshape(config.agent_view_size, config.agent_view_size, -1)
+
+        # for row in range(4):
+        # for col in range(4):
+        # # 0 1 2 3 4
+        # 0 _ _ _ _ _
+        # 1 _ _ . _ _
+        # 2 _ _ . 1 <
+        # 3 _ _ . _ _
+        # 4 _ _ _ _ _
+        row = 2
+        col = 3
+        door_motivation[2, 3, 2] = 1
+        door_motivation[1:4, 2, 2] = 0.1
+
+        # door_motivation[2, 4, 2] = 1
+        better_doors_fitness = fitness_function(door_motivation.ravel())  # raise errors
         print('fitness with front doors curiosity', better_doors_fitness)
 
     def get_best_option_score(self):
@@ -185,9 +147,10 @@ class Search(object):
         print(config.option_eval_training_steps, fitness)
         return fitness
 
-    def eval_solutions(self, fitness_function, solutions):
+    @staticmethod
+    def eval_solutions(_fitness_function, solutions):
         # result = pool.map(fitness_function, args)
-        result = map(fitness_function, solutions)
+        result = map(_fitness_function, solutions)
 
         fitness_list, options = list(zip(*result))
         fitness_list = np.array(fitness_list)
@@ -197,7 +160,7 @@ class Search(object):
 
 def main():
     regressor = Search()
-    regressor.optimize(config.experiment_name)
+    regressor.optimize()
 
 
 if __name__ == "__main__":
