@@ -43,7 +43,7 @@ def plot_intinsic_motivation(motivating_function, old_state, step):
         config.tensorboard.add_figure(f'motivating_functions/{layer}', figure, global_step=step, close=True)
 
 
-def enjoy_policy(environment, policy):
+def enjoy_policy(environment, policy, reward_function=False):
     environment.render()
     environment.render()
     obs = environment.reset()
@@ -55,11 +55,16 @@ def enjoy_policy(environment, policy):
         if action == -1:
             break
 
-        new_state, reward, terminal, info = environment.step(action)
+        obs, reward, terminal, info = environment.step(action)
+        if reward_function:
+            print('reward:', reward_function(obs))
+
         if terminal:
-            cmd = input('q_to_exit, else step')
+            cmd = input('q_to_exit, t to terminate, else step')
             if cmd == 'q':
                 break
+            if cmd == 't':
+                environment.reset()
 
 
 def enjoy_surrogate_reward(environment, surrogate_reward):

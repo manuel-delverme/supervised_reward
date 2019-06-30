@@ -250,7 +250,10 @@ def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90
     for step in tqdm.tqdm(range(training_steps), desc=desc, disable=config.disable_tqdm):
         action_idx, primitive_action = pick_action(old_state, old_action_idx=action_idx, epsilon=epsilon, nr_primitive_actions=nr_primitive_actions,
                                                    available_actions=available_actions, estimator=estimator, old_primitive_action=primitive_action, is_option=is_option)
-        config.tensorboard.add_histogram(f'learning{option_nr}/action_idx', action_idx, step)
+
+        # This is super slow, activate if necessary
+        # config.tensorboard.add_histogram(f'learning{option_nr}/action_idx', action_idx, step)
+
         config.tensorboard.add_scalar(f'learning{option_nr}/distance_traveled', np.linalg.norm(environment.agent_position_idx - initial_position), step)
         config.tensorboard.add_scalar(f'learning{option_nr}/steps_left', environment.env.steps_remaining, step)
 
@@ -341,6 +344,12 @@ def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90
                     primitive_action = TERMINATE_OPTION
 
         if generate_options and reward > 0:
+            option_nr = len(learned_options)
+
+            if option_nr >= config.max_nr_options and not eval_fitness:
+                opts = available_actions[environment.action_space.n:]
+                return opts, cumulative_reward, None, estimator
+
             motivating_function = np.multiply(surrogate_reward.reward_vector, new_state.reshape(-1))
             option_hash = motivating_function.data.tobytes()
 
@@ -354,7 +363,7 @@ def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90
                 #     environment.render()
                 #     time.sleep(0.01)
 
-                new_option = learn_option(motivating_function, environment, option_nr=len(learned_options))
+                new_option = learn_option(motivating_function, environment, option_nr=option_nr)
                 # new_option = generate_option(environment, option_reward, use_learned_options)
 
                 learned_options.add(option_hash)
@@ -418,12 +427,10 @@ def update_reward(info, new_state, replace_reward, reward, terminal, terminate_o
             reward = surr_reward
         else:
             reward += surr_reward
-
         if terminate_on_surr_reward:
             terminal = surr_reward > 0
         else:
             terminal = reward > 0
-
     return reward, terminal
 
 
@@ -479,19 +486,16 @@ def learn_option(option_reward_vector, mdp, *, training_steps=config.option_trai
     def option_reward(state, info=None):
         return option_reward_vector.dot(state.reshape(-1)) - 0.01
 
-    # print('learning option for GOAL:', option_reward_vector.reshape(5, 5, -1).T)
-    # mdp.render()
-    # mdp.render()
-    # input('')
-
     _, _, fitnesses, estimator = learn(
         environment=mdp, options=None, surrogate_reward=option_reward, training_steps=training_steps,
         terminate_on_surr_reward=True, replace_reward=True, option_nr=option_nr)
 
-    print('learned option for GOAL:', option_reward_vector.reshape(5, 5, -1).T)
-    mdp.render()
-    mdp.render()
-    input('')
-
     option = CachedPolicy(estimator, reward_function=option_reward, reward_vector=option_reward_vector)
+
+    print(f'learned option[{option_nr}] for GOAL:\n', option_reward_vector.reshape(5, 5, -1))
+    mdp.render()
+    mdp.render()
+    utils.utils.enjoy_policy(mdp, option, option_reward)
+    # input('')
+
     return option

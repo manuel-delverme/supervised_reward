@@ -19,17 +19,18 @@ class _MiniGrid(gym.Env):
         self._observation_space = None
 
     def encode_observation(self, obs):
-        image = obs['image']
+        image = obs['image'][:, :, 0]
 
-        doors = image[:, :, 0] == 4  # door
-        opens = np.logical_not(image[:, :, 2])  # door
+        doors = image == 4  # door
+        opens = np.logical_not(obs['image'][:, :, 2])  # door
 
         info_map = np.zeros(shape=(*obs['image'].shape[:-1], 4))
+
         # empty # floor; where you can go
-        info_map[:, :, 0] = np.logical_or(image[:, :, 0] == 3, image[:, :, 0] == 1, image[:, :, 0] == 8)
+        info_map[:, :, 0] = np.logical_or(image == 3, image == 1, image == 8)
 
         # wall and unseen are walls; where you can not go
-        info_map[:, :, 1] = np.logical_or(image[:, :, 0] == 2, image[:, :, 0] == 0)
+        info_map[:, :, 1] = np.logical_or(image == 2, image == 0)
 
         # info_map[:, :, 0] = np.logical_or(info_map[:, :, 0], image[:, :, 0] == 3)
         # you can go in open doors
@@ -39,12 +40,14 @@ class _MiniGrid(gym.Env):
         # you can interact with closed doors
         info_map[:, :, 2] = np.logical_and(doors, np.logical_not(opens))
         # goal positions
-        info_map[:, :, 3] = image[:, :, 0] == 8
+        info_map[:, :, 3] = image == 8
         assert info_map.max() == 1 and info_map.min() == 0
 
         # in theory 1 and 2 are complementary, so they could be skipped
-        info_map[:, :, 1] = np.logical_or(image[:, :, 0] == 2, image[:, :, 0] == 0)
+        info_map[:, :, 1] = np.logical_or(image == 2, image == 0)
+
         assert info_map[:, :, 3].sum() <= 1
+
         info_map.flags.writeable = False
         return info_map
 

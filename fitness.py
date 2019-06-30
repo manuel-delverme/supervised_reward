@@ -39,10 +39,10 @@ def fitness_function(reward_vector):
         plt.suptitle(f'discovered option nr {idx}')
         for layer in range(motivating_vector.shape[2]):
             plt.subplot(2, 2, layer + 1)
-            plt.imshow(motivating_vector[layer], vmin=motivating_vector.min(), vmax=motivating_vector.max())
+            plt.imshow(motivating_vector[:, :, layer].T, vmin=motivating_vector.min(), vmax=motivating_vector.max())
             cbar = plt.colorbar()
         plt.show()
-        utils.utils.enjoy_policy(mdp, option)
+        utils.utils.enjoy_policy(mdp, option, reward_function=lambda x: x.ravel().dot(motivating_vector.ravel()))
 
     env = config.environment()
     fitness = utils.utils.eval_options(env, options)

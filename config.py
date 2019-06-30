@@ -20,11 +20,14 @@ DEBUG = False
 print("DEBUG: ", DEBUG)
 
 experiment_name = "DEBUG:" + time.strftime("%Y_%m_%d-%H_%M_%S")
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+device = torch.device("cpu")  # GPU is slower for small networks
+
 print(f"USING {device}")
 
 response = None
-if not DEBUG and HASGUI:
+if not DEBUG and HASGUI and False:
     try:
         import tkinter.simpledialog
 
@@ -34,7 +37,6 @@ if not DEBUG and HASGUI:
         root.destroy()
     except tkinter.TclError as _:
         pass
-
 
 experiment_name = f'{response}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
 if len(sys.argv) > 1:
@@ -48,7 +50,7 @@ option_discovery_steps = 10001
 option_eval_training_steps = 10002
 option_eval_test_steps = 1003
 evolution_iters = 100004
-option_train_steps = 2005
+option_train_steps = 5005
 
 if DEBUG:
     eval_test_restarts = 1
@@ -71,7 +73,10 @@ shape_reward = False
 max_env_steps = None
 compact_observation = False
 
-visualize_learning = True
+visualize_learning = False
+enjoy = False
+enjoy_option = False
+
 disable_tqdm = False
 
 environment = envs.minigrid.MiniGrid
@@ -86,6 +91,5 @@ population = 2
 
 print('EXPERIMENT:', experiment_name)
 tensorboard = tensorboardX.SummaryWriter(os.path.join('runs', experiment_name), flush_secs=1)
-enjoy = False
-enjoy_option = False
 learn_epsilon = 0.2
+max_nr_options = 1
