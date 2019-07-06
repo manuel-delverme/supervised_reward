@@ -5,9 +5,9 @@ import config
 import envs.boxes
 import envs.hungry_thirsty
 import envs.minigrid
-import utils.utils
+import shared.constants as C
+import shared.utils
 from fitness import fitness_function
-from utils import utils
 
 
 class Search(object):
@@ -16,7 +16,7 @@ class Search(object):
         self.population_size = population_size
         _e = config.environment()
         obs = _e.reset()
-        reward_space_size = obs.ravel().shape[0]
+        reward_space_size = obs.reshape(-1).shape[0]
         self.reward_space_size = reward_space_size
         print("init done")
 
@@ -27,8 +27,6 @@ class Search(object):
 
         self.test_intuitive_cases(self.reward_space_size)
         return
-
-
 
         if config.DEBUG:
             _ = fitness_function(self.random.randn(self.reward_space_size))  # raise errors
@@ -45,7 +43,7 @@ class Search(object):
         fitness_list = map(fitness_function, population)
 
         for ind, fit in zip(population, fitness_list):
-            utils.plot_intinsic_motivation(np.array(ind), (config.agent_view_size, config.agent_view_size, -1), im_number)
+            shared.plot_intinsic_motivation(np.array(ind), (-1, config.agent_view_size, config.agent_view_size), im_number)
             im_number += 1
 
             ind.fitness.values = (fit[0],)
@@ -67,7 +65,7 @@ class Search(object):
             for ind, fit in zip(invalids, fitness_list):
                 ind.fitness.values = (fit[0],)
                 ind.statistics['options'] = fit[1]
-                utils.plot_intinsic_motivation(np.array(ind), (config.agent_view_size, config.agent_view_size, -1), im_number)
+                shared.plot_intinsic_motivation(np.array(ind), (-1, config.agent_view_size, config.agent_view_size), im_number)
                 im_number += 1
 
             hall_of_fame.update(population)
@@ -119,31 +117,99 @@ class Search(object):
         # door_fitness = fitness_function(door_motivation.ravel())
         # print('fitness with door curiosity', door_fitness)
 
-        door_motivation = np.ones(shape=reward_space_size) * -0.01
-        door_motivation = door_motivation.reshape(config.agent_view_size, config.agent_view_size, -1)
+        # Search.test_door_and_goal(reward_space_size)
+        Search.test_open_door_and_goal(reward_space_size)
+        # Search.test_door(reward_space_size)
+        # Search.test_door_gradient(reward_space_size)
 
-        # for row in range(4):
-        # for col in range(4):
+        # # door_motivation[2, 4, 2] = 1
+        # gradient_fitness, _ = fitness_function(door_motivation.ravel())  # raise errors
+        # print('fitness with gradient front doors curiosity', gradient_fitness, door_motivation, sep='\n')
+
+        # uniform_fitness, _ = fitness_function(np.zeros_like(door_motivation).ravel())  # raise errors
+        # print('fitness with gradient front doors curiosity', uniform_fitness, '0s', sep='\n')
+
+    @staticmethod
+    def test_door_and_goal(reward_space_size):
+        # D 0 1 2 3 4  G 0 1 2 3 4
+        # 0 _ _ _ _ _  0 _ _ _ _ _
+        # 1 _ _ . _ _  1 _ _ . _ _
+        # 2 _ _ . 1 <  2 _ _ . 1 <
+        # 3 _ _ . _ _  3 _ _ . _ _
+        # 4 _ _ _ _ _  4 _ _ _ _ _
+        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.01
+        intrinsic_motivation = intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
+
+        intrinsic_motivation[C.DOOR_LAYER, config.agent_view_size // 2, -2] = 1
+        intrinsic_motivation[C.DOOR_LAYER, :, -3] = 0.1
+
+        intrinsic_motivation[C.FOOD_LAYER, config.agent_view_size // 2, -2] = 2
+        intrinsic_motivation[C.FOOD_LAYER, :, -3] = 0.2
+
+        door_fitness, _ = fitness_function(intrinsic_motivation.reshape(-1))  # raise errors
+        print('fitness with door and goal curiosity', door_fitness, intrinsic_motivation.reshape(-1), sep='\n')
+
+    @staticmethod
+    def test_open_door_and_goal(reward_space_size):
+        # W 0 1 2 3 4  G 0 1 2 3 4
+        # 0 _ _ _ _ _  0 _ _ _ _ _
+        # 1 _ _ _ _ 1  1 _ _ . _ _
+        # 2 _ _ _ . <  2 _ _ . 1 <
+        # 3 _ _ _ _ 1  3 _ _ . _ _
+        # 4 _ _ _ _ _  4 _ _ _ _ _
+        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.01
+        intrinsic_motivation = intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
+
+        agent_row = config.agent_view_size // 2
+
+        intrinsic_motivation[C.WALKABLE_LAYER, agent_row + 1, -1] = -0.3
+        intrinsic_motivation[C.WALKABLE_LAYER, agent_row - 1, -1] = -0.3
+
+        intrinsic_motivation[C.UNWALKABLE_LAYER, agent_row + 1, -1] = 0.3
+        intrinsic_motivation[C.UNWALKABLE_LAYER, agent_row - 1, -1] = 0.3
+        # intrinsic_motivation[C.DOOR_LAYER, agent_row, -2] = 0.03
+
+        # intrinsic_motivation[C.FOOD_LAYER, config.agent_view_size // 2, -2] = 2
+        # intrinsic_motivation[C.FOOD_LAYER, :, -3] = 0.2
+
+        door_fitness, _ = fitness_function(intrinsic_motivation.reshape(-1))  # raise errors
+        print('fitness with open doors curiosity', door_fitness,
+              intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size), sep='\n')
+
+    @staticmethod
+    def test_door_gradient(reward_space_size):
         # # 0 1 2 3 4
         # 0 _ _ _ _ _
         # 1 _ _ . _ _
         # 2 _ _ . 1 <
         # 3 _ _ . _ _
         # 4 _ _ _ _ _
-        row = 2
-        col = 3
-        door_motivation[2, 3, 2] = 1
-        door_motivation[1:4, 2, 2] = 0.1
+        door_motivation = np.ones(shape=reward_space_size) * -0.01
+        door_motivation = door_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
+        door_motivation[config.agent_view_size // 2, -2, 2] = 1
+        door_motivation[1:-1, -3, 2] = 0.1
 
+    @staticmethod
+    def test_door(reward_space_size):
+        # # 0 1 2 3 4
+        # 0 _ _ _ _ _
+        # 1 _ _ _ _ _
+        # 2 _ _ _ 1 <
+        # 3 _ _ _ _ _
+        # 4 _ _ _ _ _
+        door_motivation = np.ones(shape=reward_space_size) * -0.01
+        door_motivation = door_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
+        door_motivation[config.agent_view_size // 2, -2, 2] = 1
+        # door_motivation[1:4, 2, 2] = 0.1
         # door_motivation[2, 4, 2] = 1
-        better_doors_fitness = fitness_function(door_motivation.ravel())  # raise errors
-        print('fitness with front doors curiosity', better_doors_fitness)
+        door_fitness, _ = fitness_function(door_motivation.reshape(-1))  # raise errors
+        print('fitness with front doors curiosity', door_fitness, door_motivation.T, sep='\n')
 
     def get_best_option_score(self):
         # options = [learners.approx_q_learning.generate_option(config.environment(), (4, 4, 0), False), ]
         # options = [learners.approx_q_learning.generate_option(config.environment(), (6, 6, 0), False), ]
         print("eval options", str(sorted([str(o) for o in options]))[:50], end=' ')
-        fitness = utils.eval_options(envs.minigrid.MiniGrid(), options)
+        fitness = shared.eval_options(envs.minigrid.MiniGrid(), options)
         print(config.option_eval_training_steps, fitness)
         return fitness
 

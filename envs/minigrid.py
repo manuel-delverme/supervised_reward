@@ -24,29 +24,29 @@ class _MiniGrid(gym.Env):
         doors = image == 4  # door
         opens = np.logical_not(obs['image'][:, :, 2])  # door
 
-        info_map = np.zeros(shape=(*obs['image'].shape[:-1], 4))
+        info_map = np.zeros(shape=(4, *obs['image'].shape[:-1]))
 
         # empty # floor; where you can go
-        info_map[:, :, 0] = np.logical_or(image == 3, image == 1, image == 8)
+        info_map[0, :, :] = np.logical_or(np.logical_or(image == 3, image == 1), image == 8).astype(np.int8)
 
         # wall and unseen are walls; where you can not go
-        info_map[:, :, 1] = np.logical_or(image == 2, image == 0)
+        info_map[1, :, :] = np.logical_or(image == 2, image == 0)
 
         # info_map[:, :, 0] = np.logical_or(info_map[:, :, 0], image[:, :, 0] == 3)
         # you can go in open doors
-        info_map[:, :, 0][np.logical_and(doors, opens)] = 1
+        info_map[0, :, :][np.logical_and(doors, opens)] = 1
         # you can not go in not open doors
-        info_map[:, :, 1][np.logical_and(doors, np.logical_not(opens))] = 1
+        info_map[1, :, :][np.logical_and(doors, np.logical_not(opens))] = 1
         # you can interact with closed doors
-        info_map[:, :, 2] = np.logical_and(doors, np.logical_not(opens))
+        info_map[2, :, :] = np.logical_and(doors, np.logical_not(opens))
         # goal positions
-        info_map[:, :, 3] = image == 8
+        info_map[3, :, :] = image == 8
         assert info_map.max() == 1 and info_map.min() == 0
 
         # in theory 1 and 2 are complementary, so they could be skipped
-        info_map[:, :, 1] = np.logical_or(image == 2, image == 0)
+        info_map[1, :, :] = np.logical_or(image == 2, image == 0)
 
-        assert info_map[:, :, 3].sum() <= 1
+        assert info_map[3, :, :].sum() <= 1
 
         info_map.flags.writeable = False
         return info_map
@@ -64,7 +64,7 @@ class _MiniGrid(gym.Env):
     def observation_space(self):
         if self._observation_space is None:
             ob = self.reset()
-            self._observation_space = gym.spaces.discrete.Discrete(*ob.ravel().shape)
+            self._observation_space = gym.spaces.discrete.Discrete(*ob.reshape(-1).shape)
         return self._observation_space
 
     def step(self, action):

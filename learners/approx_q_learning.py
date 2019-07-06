@@ -1,3 +1,4 @@
+import os
 import random
 import time
 
@@ -6,18 +7,14 @@ import sklearn.kernel_approximation
 import sklearn.linear_model
 import sklearn.pipeline
 import sklearn.preprocessing
+import tensorboardX
 import torch.nn as nn
 import torch.optim
 import tqdm
 
 import config
-import utils
-
-TERMINATE_OPTION = -1
-
-
-def hash_image(image):
-    return image.data.tobytes()
+import shared.constants
+import shared.utils
 
 
 class CachedPolicy:
@@ -25,18 +22,18 @@ class CachedPolicy:
         self.estimator = estimator
         self.cache = {}
         self.reward_vector = reward_vector
-        self.reward_matrix = reward_vector.reshape(config.agent_view_size, config.agent_view_size, -1)
+        self.reward_matrix = reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size)
         self.reward_function = reward_function
 
     def __setitem__(self, obs_hash, value):
-        obs_hash = hash_image(obs_hash)
+        obs_hash = shared.utils.hash_image(obs_hash)
         self.cache[obs_hash] = value
 
     def __getitem__(self, image):
-        if self.reward_function(image.ravel()) > 0:
+        if self.reward_function(image.reshape(-1)) > 0:
             return -1
 
-        obs_hash = hash_image(image)
+        obs_hash = shared.utils.hash_image(image)
         if obs_hash not in self.cache:
             q_values = self.estimator.predict(image)
             action_idx = int(np.argmax(q_values))
@@ -66,7 +63,7 @@ class FeatureTransformer:
         self.featurizer.fit(np.random.randn(1, 147))
 
     def transform(self, observations):
-        observations = np.array(observations).ravel().reshape(1, -1)
+        observations = np.array(observations).reshape(1, -1)
         assert observations.shape == (1, 196)
         if len(observations.shape) == 1:
             observations = observations.reshape(1, -1)
@@ -76,26 +73,21 @@ class FeatureTransformer:
 class LinearRegressionModel(nn.Module):
     def __init__(self, nr_inputs):
         super(LinearRegressionModel, self).__init__()
-        # self.feats = nn.Sequential(nn.Conv2d(4, 1, (3, 3)))
-        self.reg = nn.Linear(nr_inputs, 1)
-        # torch.nn.Linear(nr_inputs, 1),
+        self.regressor = nn.Linear(nr_inputs, 1)
 
     def forward(self, x):
-        # feat = self.feats(x)
-        # feat = feat.reshape(x.size(0), -1)
         x = x.flatten(start_dim=1)
-        # feat = torch.cat((feat, x), dim=1)
-        feat = x
-        y_pred = self.reg(feat)
+        y_pred = self.regressor(x)
         return y_pred
 
 
 class PytorchEstimator:
-    def __init__(self, action_size: int, observation_size: int):
+    def __init__(self, action_size: int, observation_size: int, nr_usable_actions):
         self.models = []
         self.optimizers = []
         self.criterion = nn.MSELoss()
         self.nr_inputs = observation_size
+        self.nr_usable_actions = nr_usable_actions
 
         for _ in range(action_size):
             self.add_new_action()
@@ -140,8 +132,12 @@ class PytorchEstimator:
 
     def preprocess(self, observation):
         # features = observation.reshape(1, -1)
-        features = torch.FloatTensor(observation).unsqueeze(0).permute(0, 3, 1, 2).to(config.device)
-        return features
+        f = torch.from_numpy(observation).float()
+        f = f.unsqueeze(0)
+        f.flatten(start_dim=1)
+        # f = f.permute(0, 3, 1, 2)
+        f = f.to(config.device)
+        return f
 
     # end update
 
@@ -159,24 +155,25 @@ class PytorchEstimator:
     # end sample_action
 
 
-def pick_action_test(state, old_action_idx, old_primitive_action, is_option, nr_primitive_actions=None, available_actions=None, estimator=None):
-    return pick_action(state, old_action_idx, old_primitive_action, is_option, nr_primitive_actions=nr_primitive_actions, available_actions=available_actions, estimator=estimator,
-                       exploit=True)
+def pick_action_test(state, old_action_idx, old_primitive_action, is_option, available_actions=None, estimator=None):
+    return pick_action(state, old_action_idx, old_primitive_action, is_option, available_actions=available_actions, estimator=estimator, exploit=True)
 
 
-def pick_action(observation, old_action_idx, old_primitive_action, is_option, *, exploit=False, epsilon=None, nr_primitive_actions=None, available_actions=None, estimator=None):
+def pick_action(observation, old_action_idx, old_primitive_action, is_option, *, exploit=False, epsilon=None, available_actions=None, estimator=None):
     was_option = is_option(old_action_idx)
-    # config.tensorboard.add_scalar('learning/was_option', was_option)
+    # logger.add_scalar('learning/was_option', was_option)
 
-    if not was_option or old_primitive_action == TERMINATE_OPTION:
+    if not was_option or old_primitive_action == shared.constants.TERMINATE_OPTION:
         if exploit or epsilon < random.random():
             # greedy
             q_values = estimator.predict(observation)
+            q_values = q_values[:len(available_actions)]
             action_idx = int(np.argmax(q_values))
         else:
             # explore
             action_idx = random.randint(0, len(available_actions) - 1)
-            while is_option(action_idx) and available_actions[action_idx][observation] == TERMINATE_OPTION:
+
+            while is_option(action_idx) and available_actions[action_idx][observation] == shared.constants.TERMINATE_OPTION:
                 action_idx = random.randint(0, len(available_actions) - 1)
 
         if is_option(action_idx):
@@ -198,9 +195,26 @@ def td_update(estimator, state, action_idx, reward, future_reward):
     # discounted_reward = discounted_reward_under_option + reward * (gamma ** time_difference)
 
 
-def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90, surrogate_reward=None, generate_options=False, terminate_on_surr_reward=False,
-          training_steps=None, replace_reward=config.replace_reward, eval_fitness=True, option_nr=-1):
-    estimator = PytorchEstimator(environment.action_space.n + len(options or []), observation_size=environment.observation_space.n)
+def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.90, surrogate_reward=None, generate_options=False, terminate_on_surr_reward=False,
+          training_steps=None, replace_reward=config.replace_reward, eval_fitness=True, option_nr=-1, log_postfix=''):
+    position = 0
+    if generate_options:
+        type_of_run = 'discovery'
+        position = 1
+    else:
+        if eval_fitness:
+            type_of_run = 'eval'
+            # position = 1
+        else:
+            type_of_run = 'option'
+            # position = 1
+
+    if log_postfix:
+        logger = tensorboardX.SummaryWriter(os.path.join('runs', config.experiment_name, log_postfix), flush_secs=1)
+    else:
+        raise Exception
+        logger = config.tensorboard
+
     nr_primitive_actions = environment.action_space.n
     available_actions = list(range(nr_primitive_actions))
     action_size = environment.action_space.n
@@ -211,6 +225,10 @@ def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90
         action_size += len(options)
         for option in options:
             action_to_id[option] = len(action_to_id)
+
+    nr_usable_actions = len(available_actions)  # disallow learned options to be used
+    print('nr available actions', nr_usable_actions)
+    estimator = PytorchEstimator(environment.action_space.n + len(options or []), observation_size=environment.observation_space.n, nr_usable_actions=nr_usable_actions)
 
     def make_is_option(num_actions):
         def is_option(action):
@@ -238,35 +256,40 @@ def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90
     reward = None
 
     old_state = environment.reset()
-    initial_position = environment.agent_position_idx
     new_state = old_state
 
-    if config.enjoy or (config.enjoy_option and not generate_options):
-        utils.utils.plot_surrogate_reward(environment, surrogate_reward)
-        utils.utils.enjoy_surrogate_reward(environment, surrogate_reward)
+    if surrogate_reward is not None and (config.enjoy_surrogate_reward or (
+            config.enjoy_option and not generate_options)):
+        print('plotting', type_of_run)
+        shared.utils.plot_surrogate_reward(environment, surrogate_reward)
 
-    # for step in range(training_steps):
-    desc = f"Training {'master' if generate_options else 'option'}, option nr {option_nr}"
-    for step in tqdm.tqdm(range(training_steps), desc=desc, disable=config.disable_tqdm):
-        action_idx, primitive_action = pick_action(old_state, old_action_idx=action_idx, epsilon=epsilon, nr_primitive_actions=nr_primitive_actions,
-                                                   available_actions=available_actions, estimator=estimator, old_primitive_action=primitive_action, is_option=is_option)
+        print('enjoying', type_of_run)
+        shared.utils.enjoy_surrogate_reward(environment, surrogate_reward)
+
+    desc = f"Training {type_of_run}, option nr {option_nr}"
+    for step in tqdm.tqdm(range(training_steps), desc=desc, disable=config.disable_tqdm, position=position):
+
+        action_idx, primitive_action = pick_action(
+            observation=old_state, old_action_idx=action_idx, epsilon=epsilon, available_actions=available_actions[:nr_usable_actions], estimator=estimator,
+            old_primitive_action=primitive_action, is_option=is_option)
 
         # This is super slow, activate if necessary
-        # config.tensorboard.add_histogram(f'learning{option_nr}/action_idx', action_idx, step)
+        # logger.add_histogram(f'learning{option_nr}/action_idx', action_idx, step)
 
-        config.tensorboard.add_scalar(f'learning{option_nr}/distance_traveled', np.linalg.norm(environment.agent_position_idx - initial_position), step)
-        config.tensorboard.add_scalar(f'learning{option_nr}/steps_left', environment.env.steps_remaining, step)
+        # logger.add_scalar(f'learning{option_nr}/distance_traveled', np.linalg.norm(environment.agent_position_idx - initial_position), step)
+        # logger.add_scalar(f'learning{option_nr}/steps_left', environment.env.steps_remaining, step)
 
-        if is_option(action_idx):
-            config.tensorboard.add_scalar(f'learning{option_nr}/option_taken', 1, step)
-            if option_begin_state is None:
-                option_begin_state = old_state
+        if options:
+            if is_option(action_idx):
+                logger.add_scalar(f'learning{option_nr}/option_taken', 1, step)
+                if option_begin_state is None:
+                    option_begin_state = old_state
 
-        else:
-            config.tensorboard.add_scalar(f'learning{option_nr}/option_taken', 0, step)
+            else:
+                logger.add_scalar(f'learning{option_nr}/option_taken', 0, step)
 
-        # config.tensorboard.add_scalar('debug/step', step, step)
-        if primitive_action == TERMINATE_OPTION:
+        # logger.add_scalar('debug/step', step, step)
+        if primitive_action == shared.constants.TERMINATE_OPTION:
             # option update and state reset
             discounted_future_value = gamma * max(estimator.predict(new_state))
             td_update(estimator, option_begin_state, action_idx, discounted_reward_under_option, discounted_future_value)
@@ -278,10 +301,13 @@ def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90
         else:
             new_state, reward, terminal, info = environment.step(available_actions[primitive_action])
             if environment.ob_rms:
-                config.tensorboard.add_scalar('learning/obmean', environment.ob_rms.mean.mean(), step)
-                config.tensorboard.add_scalar('learning/obvar', environment.ob_rms.var.mean(), step)
+                logger.add_scalar(f'learning{option_nr}/obmean', environment.ob_rms.mean.mean(), step)
+                logger.add_scalar(f'learning{option_nr}/obvar', environment.ob_rms.var.mean(), step)
             fitness += 1 if reward > 0 else 0
-            config.tensorboard.add_scalar(f'learning{option_nr}/real_reward', reward, step)
+
+            if not replace_reward:
+                logger.add_scalar(f'learning{option_nr}/real_reward', reward, step)
+                logger.add_scalar(f'learning{option_nr}/fitness', fitness, step)
 
             if config.shape_reward:
                 next_cells = [
@@ -298,14 +324,16 @@ def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90
                 reward -= distance / 100
 
             reward, terminal = update_reward(info, new_state, replace_reward, reward, terminal, terminate_on_surr_reward, surrogate_reward)
-            config.tensorboard.add_scalar(f'learning{option_nr}/received_reward', reward, step)
+            logger.add_scalar(f'learning{option_nr}/received_reward', reward, step)
 
             cumulative_reward += reward
-            config.tensorboard.add_scalar(f'learning{option_nr}/cum_reward', cumulative_reward, step)
+            # logger.add_scalar(f'learning{option_nr}/cum_received_reward', cumulative_reward, step)
 
-            if option_nr > -1 and config.visualize_learning and step > (training_steps - 1000):
-                environment.render(reward=reward + 0.01, step=step)
-                time.sleep(0.3)
+            if type_of_run == 'eval' and config.enjoy_master_learning and step > (training_steps - 500):
+                environment.render(reward=reward, step=step, action_idx=action_idx)
+                # if action_idx >= nr_primitive_actions:
+                #     input('>')
+                # time.sleep(0.3)
                 # if terminal:
                 #     fancy_render(environment, estimator, seen_rewards, step)
 
@@ -327,7 +355,7 @@ def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90
             else:
                 discounted_future_value = gamma * max(estimator.predict(new_state))
 
-            config.tensorboard.add_scalar(f'learning{option_nr}/action_td', reward + discounted_future_value, step)
+            # logger.add_scalar(f'learning{option_nr}/action_td', reward + discounted_future_value, step)
             td_update(estimator, old_state, primitive_action, reward, discounted_future_value)
 
             if is_option(action_idx):
@@ -336,46 +364,48 @@ def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90
                 time_steps_under_option += 1
 
                 if terminal:
-                    config.tensorboard.add_scalar(f'learning{option_nr}/option_td', reward + discounted_future_value, step)
+                    # logger.add_scalar(f'learning{option_nr}/option_td', reward + discounted_future_value, step)
                     td_update(estimator, option_begin_state, action_idx, discounted_reward_under_option, future_reward=0)
                     time_steps_under_option = 0
                     discounted_reward_under_option = 0
                     option_begin_state = None
-                    primitive_action = TERMINATE_OPTION
+                    primitive_action = shared.constants.TERMINATE_OPTION
 
-        if generate_options and reward > 0:
+        if generate_options and reward > config.option_trigger_treshold:
             option_nr = len(learned_options)
 
-            if option_nr >= config.max_nr_options and not eval_fitness:
-                opts = available_actions[environment.action_space.n:]
-                return opts, cumulative_reward, None, estimator
-
             motivating_function = np.multiply(surrogate_reward.reward_vector, new_state.reshape(-1))
-            option_hash = motivating_function.data.tobytes()
+
+            option_hash = hash_option(motivating_function)
 
             if option_hash not in learned_options:
                 # reward = self.surrogate_reward(self.environment)
                 # goal = self.environment.agent_position_idx
 
-                # motivating_function = np.einsum('s,s->s', surrogate_reward.reward_vector, new_state.ravel())
+                # motivating_function = np.einsum('s,s->s', surrogate_reward.reward_vector, new_state.reshape(-1))
 
                 # for _ in range(200):
                 #     environment.render()
                 #     time.sleep(0.01)
 
                 new_option = learn_option(motivating_function, environment, option_nr=option_nr)
-                # new_option = generate_option(environment, option_reward, use_learned_options)
-
                 learned_options.add(option_hash)
 
                 available_actions.append(new_option)
-                estimator.add_new_action()
+
+                # learned options are not used
+                # estimator.add_new_action()
+
+            if option_nr >= config.max_nr_options and not eval_fitness:
+                opts = available_actions[nr_primitive_actions:]
+                return opts, cumulative_reward, None, estimator
 
         old_state = new_state
 
     if eval_fitness:
-        test_fitness = test(environment=environment, estimator=estimator, eval_steps=config.option_eval_test_steps, render=False,
-                            terminate_on_surr_reward=terminate_on_surr_reward, is_option=is_option, surrogate_reward=surrogate_reward, available_actions=available_actions)
+        test_fitness = test(
+            environment=environment, estimator=estimator, eval_steps=config.option_eval_test_steps, render=False, terminate_on_surr_reward=terminate_on_surr_reward,
+            is_option=is_option, surrogate_reward=surrogate_reward, available_actions=available_actions[:nr_usable_actions])
         # print("FITNESS: ", test_fitness)
         # test_fitness = test(environment=environment, estimator=estimator, eval_steps=config.option_eval_test_steps // 10, render=True,
         #                     terminate_on_surr_reward=terminate_on_surr_reward, is_option=is_option, surrogate_reward=surrogate_reward, available_actions=available_actions)
@@ -383,8 +413,16 @@ def learn(environment, *, options=None, epsilon=config.learn_epsilon, gamma=0.90
     else:
         test_fitness = None
 
-    opts = available_actions[environment.action_space.n:]
+    opts = available_actions[nr_primitive_actions:]
     return opts, cumulative_reward, test_fitness, estimator
+
+
+def hash_option(motivating_function):
+    # TODO: this is an hack
+    # option_hash = motivating_function.data.tobytes()
+    option_hash, = np.where(motivating_function > config.option_trigger_treshold)
+    option_hash = option_hash.data.tobytes()
+    return option_hash
 
 
 def fancy_render(environment, estimator, seen_rewards, step):
@@ -484,18 +522,20 @@ def is_terminate_option(skill, old_state):
 def learn_option(option_reward_vector, mdp, *, training_steps=config.option_train_steps, option_nr=-1):  # reduced for 7x7
 
     def option_reward(state, info=None):
-        return option_reward_vector.dot(state.reshape(-1)) - 0.01
+        return option_reward_vector.dot(state.reshape(-1))
 
-    _, _, fitnesses, estimator = learn(
-        environment=mdp, options=None, surrogate_reward=option_reward, training_steps=training_steps,
-        terminate_on_surr_reward=True, replace_reward=True, option_nr=option_nr)
+    option_reward.reward_vector = option_reward_vector
+
+    _, _, _, estimator = learn(
+        environment=mdp, options=None, surrogate_reward=option_reward, training_steps=training_steps, eval_fitness=False,
+        terminate_on_surr_reward=True, replace_reward=True, option_nr=option_nr, log_postfix=f'learn_option{option_nr}')
 
     option = CachedPolicy(estimator, reward_function=option_reward, reward_vector=option_reward_vector)
 
-    print(f'learned option[{option_nr}] for GOAL:\n', option_reward_vector.reshape(5, 5, -1))
-    mdp.render()
-    mdp.render()
-    utils.utils.enjoy_policy(mdp, option, option_reward)
-    # input('')
+    if config.enjoy_learned_options:
+        print(f'learned option[{option_nr}] for GOAL:', option_reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size))
 
+        mdp.render()
+        mdp.render()
+        shared.utils.enjoy_policy(mdp, option, option_reward)
     return option

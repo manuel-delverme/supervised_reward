@@ -12,7 +12,7 @@ import os
 import tensorboardX
 import torch
 
-agent_view_size = 5  # 7
+agent_view_size = 3  # 5  # 7
 import envs.minigrid
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
@@ -37,6 +37,9 @@ if not DEBUG and HASGUI and False:
         root.destroy()
     except tkinter.TclError as _:
         pass
+    else:
+        if response[0] == 'D':
+            DEBUG = True
 
 experiment_name = f'{response}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
 if len(sys.argv) > 1:
@@ -46,11 +49,14 @@ repeat_eval_options = 1 if DEBUG else 1
 
 fitness_training_steps = None
 eval_test_restarts = 1  # 0
-option_discovery_steps = 10001
-option_eval_training_steps = 10002
-option_eval_test_steps = 1003
-evolution_iters = 100004
+option_discovery_steps = 2001
+
+option_eval_training_steps = 3002
+option_eval_test_steps = 2003
+
 option_train_steps = 5005
+
+evolution_iters = 150004
 
 if DEBUG:
     eval_test_restarts = 1
@@ -70,12 +76,14 @@ generate_on_rw = True
 replace_reward = False
 use_learned_options = False
 shape_reward = False
-max_env_steps = None
+max_env_steps = 100  # None
 compact_observation = False
 
-visualize_learning = False
-enjoy = False
-enjoy_option = False
+visualize_all = False
+enjoy_surrogate_reward = visualize_all or True
+enjoy_master_learning = visualize_all or True
+enjoy_learned_options = visualize_all or True
+enjoy_option = visualize_all or False
 
 disable_tqdm = False
 
@@ -92,4 +100,5 @@ population = 2
 print('EXPERIMENT:', experiment_name)
 tensorboard = tensorboardX.SummaryWriter(os.path.join('runs', experiment_name), flush_secs=1)
 learn_epsilon = 0.2
-max_nr_options = 1
+max_nr_options = 2
+option_trigger_treshold = 0.6

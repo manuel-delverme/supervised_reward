@@ -11,14 +11,11 @@ from learners.approx_q_learning import update_reward
 def eval_options(env, options):
     cum_score = 0
     for eval_step in range(config.repeat_eval_options):
-        cum_score += eval_option_on_mdp(env, options)
+        _, _, fitness, _ = learners.approx_q_learning.learn(
+            environment=env, options=options, training_steps=config.option_eval_training_steps, eval_fitness=True, log_postfix=f'eval_options{eval_step}')
+        cum_score += fitness
+
     return cum_score / (eval_step + 1)
-
-
-# @disk_utils.disk_cache
-def eval_option_on_mdp(env, options):
-    _, _, fitness, _ = learners.approx_q_learning.learn(environment=env, options=options, training_steps=config.option_eval_training_steps, eval_fitness=True)
-    return fitness
 
 
 def print_statistics(fitness, options):
@@ -52,19 +49,19 @@ def enjoy_policy(environment, policy, reward_function=False):
         action = policy[obs]
         environment.render()
 
-        if action == -1:
-            break
+        while action == -1:
+            obs = environment.reset()
+            action = policy[obs]
 
         obs, reward, terminal, info = environment.step(action)
         if reward_function:
             print('reward:', reward_function(obs))
 
-        if terminal:
-            cmd = input('q_to_exit, t to terminate, else step')
-            if cmd == 'q':
-                break
-            if cmd == 't':
-                environment.reset()
+        cmd = input('q_to_exit, t to terminate, else step')
+        if cmd == 'q':
+            break
+        if cmd == 't':
+            obs = environment.reset()
 
 
 def enjoy_surrogate_reward(environment, surrogate_reward):
@@ -82,12 +79,14 @@ def enjoy_surrogate_reward(environment, surrogate_reward):
         if action == 4:
             return
 
-        new_state, reward, terminal, info = environment.step(action)
-        reward, terminal = update_reward(info, new_state, False, reward, terminal, False, surrogate_reward)
-        print(reward)
+        new_state, env_reward, terminal, info = environment.step(action)
+        reward, terminal = update_reward(info, new_state, False, env_reward, terminal, False, surrogate_reward)
+        print('updated reward from env', reward, 'real reward', env_reward)
 
 
 def plot_surrogate_reward(environment, surrogate_reward):
+    print('enjoying reward', surrogate_reward.reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size), sep='\n')
+
     replace_reward = True
     terminate_on_surr_reward = False
 
@@ -95,10 +94,9 @@ def plot_surrogate_reward(environment, surrogate_reward):
     rewards = {idx: np.zeros(shape=(environment.env.height, environment.env.width)) for idx in range(4)}
     x1s, x2s, rs = [], [], []
     for _ in range(1000):
-
         action = random.choice((0, 1, 2, 2, 3))
-        if action == 3:
-            action = 2
+        # if action == 3:
+        #     action = 2
 
         new_state, reward, terminal, info = environment.step(action)
         reward, terminal = update_reward(info, new_state, replace_reward, reward, terminal, terminate_on_surr_reward, surrogate_reward)
@@ -126,4 +124,6 @@ def plot_surrogate_reward(environment, surrogate_reward):
         # plt.legend()
     plt.show()
 
-    print(rewards)
+
+def hash_image(image):
+    return image.data.tobytes()
