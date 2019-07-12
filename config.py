@@ -12,8 +12,17 @@ import os
 import tensorboardX
 import torch
 
-agent_view_size = 3  # 5  # 7
+agent_view_size = 5  # 7
 import envs.minigrid
+
+environment = envs.minigrid.MiniGrid
+env_name = 'MiniGrid-MultiRoom-N2-S1-v0'
+# env_name = 'MiniGrid-Empty-6x6-v0'
+# env_name = 'MiniGrid-Empty-8x8-v0'
+# env_name = 'MiniGrid-MultiRoom-N2-S4-v0'
+# env_name = 'MiniGrid-MultiRoom-N2-S6-v0'
+# env_name = 'MiniGrid-MultiRoom-N6-v0' # impossible
+
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
 DEBUG = False
@@ -49,56 +58,62 @@ repeat_eval_options = 1 if DEBUG else 1
 
 fitness_training_steps = None
 eval_test_restarts = 1  # 0
+
 option_discovery_steps = 2001
 
-option_eval_training_steps = 3002
+option_eval_training_steps = 100002
 option_eval_test_steps = 2003
 
 option_train_steps = 5005
 
 evolution_iters = 150004
+max_env_steps = 200  # None
+learning_rate = 0.01
+
+if 'S1' in env_name:
+    option_train_steps //= 5
+    option_discovery_steps //= 5
+    option_eval_training_steps //= 5
+    max_env_steps /= 5  # None
+    learning_rate = 0.01
 
 if DEBUG:
     eval_test_restarts = 1
     option_train_steps = 10
     option_discovery_steps //= 5
     option_eval_training_steps //= 10
-    option_eval_test_steps //= 10
+    # option_eval_test_steps //= 10
     evolution_iters = 10
 
 # main.env_name = "debug"
 # env_name = "boxes"
 # env_name = "hungry-thirsty"
 # env_name = "minigrid"
-learning_rate = 0.001
 
 generate_on_rw = True
-replace_reward = False
+replace_reward = True
 use_learned_options = False
 shape_reward = False
-max_env_steps = 100  # None
 compact_observation = False
 
-visualize_all = False
-enjoy_surrogate_reward = visualize_all or True
-enjoy_master_learning = visualize_all or True
-enjoy_learned_options = visualize_all or True
-enjoy_option = visualize_all or False
+visualize_all = 0
+enjoy_surrogate_reward = visualize_all or 0
+enjoy_master_learning = visualize_all or 0
+enjoy_learned_options = visualize_all or 0
+enjoy_option = visualize_all or 0
+enjoy_test = visualize_all or 0
 
 disable_tqdm = False
-
-environment = envs.minigrid.MiniGrid
-# env_name = 'MiniGrid-Empty-6x6-v0'
-# env_name = 'MiniGrid-Empty-8x8-v0'
-env_name = 'MiniGrid-MultiRoom-N2-S4-v0'
-# env_name = 'MiniGrid-MultiRoom-N2-S6-v0'
-# env_name = 'MiniGrid-MultiRoom-N6-v0' # impossible
-
 
 population = 2
 
 print('EXPERIMENT:', experiment_name)
+# class fake_writer:
+#     def add_scalar(*args):
+#         pass
+# tensorboard = fake_writer()
 tensorboard = tensorboardX.SummaryWriter(os.path.join('runs', experiment_name), flush_secs=1)
-learn_epsilon = 0.2
-max_nr_options = 2
-option_trigger_treshold = 0.6
+
+learn_epsilon = 0.1
+max_nr_options = 1
+option_trigger_treshold = 0.5

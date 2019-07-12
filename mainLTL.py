@@ -10,23 +10,34 @@ import shared.utils
 from fitness import fitness_function
 
 
-class Reward:
-    def __init__(self, reward_vector):
-        self.reward_vector = reward_vector
+class LTLReward:
+    def __init__(self, target_state):
+        self.target_state = target_state
+        self.state = {}
 
-    def __call__(self, observation, environment):
-        image = observation.reshape(-1)
-        return self.reward_vector.dot(image)
+    def __repr__(self):
+        return f"reach {self.target_state}"
 
-    def __str__(self):
-        surrogate_reward.reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size)
+    def __call__(self, new_state, environment):
+        grid = environment.env.grid
+        for cell in grid.grid:
+            if cell is None:
+                continue
+
+            # def progress_condition(_cell):
+            #     return _cell.type == 'door' and _cell.is_open == self.door
+            # if progress_condition(cell):
+
+            if cell.type == 'door':
+                self.state['door'] = cell.is_open
+
+                if self.state['door'] == self.target_state['door']:
+                    return 1.0
+        else:
+            return -0.1
 
     def motivating_function(self):
-        motivating_function = np.multiply(surrogate_reward.reward_vector, new_state.reshape(-1))
-
-        negative_rewards = surrogate_reward.reward_vector[surrogate_reward.reward_vector < 0]
-        # keep the punishments
-        motivating_function[surrogate_reward.reward_vector < 0] = negative_rewards
+        return LTLReward(self.state.copy())
 
 
 class Search(object):
@@ -153,18 +164,12 @@ class Search(object):
 
     @staticmethod
     def test_open_door(reward_space_size):
-        agent_row = config.agent_view_size // 2
-        middle = config.agent_view_size // 2
 
-        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.0000001
-        intrinsic_motivation = intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
-
-        intrinsic_motivation[C.DOOR_LAYER, agent_row, -2] = 0.55
-        intrinsic_motivation[C.WALKABLE_LAYER, agent_row, -2] = 0.1
-
-        reward = Reward(reward_vector=intrinsic_motivation.reshape(-1))
-        door_fitness, _ = fitness_function(reward)  # raise errors
-        print('fitness with open doors curiosity', door_fitness, intrinsic_motivation, sep='\n')
+        door_ltl = LTLReward({
+            'door': True,
+        })
+        door_fitness, _ = fitness_function(door_ltl)  # raise errors
+        print('fitness with open doors curiosity', door_fitness, 'door ltl')
 
     @staticmethod
     def test_door_gradient(reward_space_size):

@@ -46,16 +46,20 @@ def enjoy_policy(environment, policy, reward_function=False):
     obs = environment.reset()
 
     while True:
-        action = policy[obs]
+        print(obs.reshape(-1, config.agent_view_size, config.agent_view_size))
+        print('values:',
+              *zip(('<', '>', 'foward', 'toggle'), policy.get_value(obs)),
+              sep='\n')
+        action = policy.get_or_terminate(obs, environment)
         environment.render()
 
         while action == -1:
             obs = environment.reset()
-            action = policy[obs]
+            action = policy.get_or_terminate(obs, environment)
 
         obs, reward, terminal, info = environment.step(action)
         if reward_function:
-            print('reward:', reward_function(obs))
+            print('reward:', reward_function(obs, environment))
 
         cmd = input('q_to_exit, t to terminate, else step')
         if cmd == 'q':
@@ -80,12 +84,12 @@ def enjoy_surrogate_reward(environment, surrogate_reward):
             return
 
         new_state, env_reward, terminal, info = environment.step(action)
-        reward, terminal = update_reward(info, new_state, False, env_reward, terminal, False, surrogate_reward)
-        print('updated reward from env', reward, 'real reward', env_reward)
+        reward, terminal = update_reward(environment, new_state, True, env_reward, terminal, False, surrogate_reward)
+        print('updated reward from env', reward, 'real reward', env_reward, 'terminal', terminal)
 
 
 def plot_surrogate_reward(environment, surrogate_reward):
-    print('enjoying reward', surrogate_reward.reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size), sep='\n')
+    print('enjoying reward', surrogate_reward, sep='\n')
 
     replace_reward = True
     terminate_on_surr_reward = False
@@ -99,7 +103,10 @@ def plot_surrogate_reward(environment, surrogate_reward):
         #     action = 2
 
         new_state, reward, terminal, info = environment.step(action)
-        reward, terminal = update_reward(info, new_state, replace_reward, reward, terminal, terminate_on_surr_reward, surrogate_reward)
+        reward, terminal = update_reward(environment, new_state, replace_reward, reward, terminal, terminate_on_surr_reward, surrogate_reward)
+
+        if terminal:
+            environment.reset()
 
         x1, x2 = environment.env.agent_pos
         x1s.append(x1)
