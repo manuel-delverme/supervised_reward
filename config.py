@@ -16,13 +16,14 @@ agent_view_size = 5  # 7
 import envs.minigrid
 
 environment = envs.minigrid.MiniGrid
-env_name = 'MiniGrid-MultiRoom-N2-S1-v0'
-# env_name = 'MiniGrid-Empty-6x6-v0'
-# env_name = 'MiniGrid-Empty-8x8-v0'
-# env_name = 'MiniGrid-MultiRoom-N2-S4-v0'
+# env_name = 'MiniGrid-MultiRoom-N2-S1-v0'
+env_name = 'MiniGrid-MultiRoom-N2-S4-v0'
 # env_name = 'MiniGrid-MultiRoom-N2-S6-v0'
 # env_name = 'MiniGrid-MultiRoom-N6-v0' # impossible
+# env_name = 'MiniGrid-Empty-6x6-v0'
+# env_name = 'MiniGrid-Empty-8x8-v0'
 
+see_trough_walls = False
 
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
 DEBUG = False
@@ -61,10 +62,10 @@ eval_test_restarts = 1  # 0
 
 option_discovery_steps = 2001
 
-option_eval_training_steps = 100002
-option_eval_test_steps = 2003
+option_eval_training_steps = 20002
+option_eval_test_steps = 5003
 
-option_train_steps = 5005
+option_train_steps = 10005
 
 evolution_iters = 150004
 max_env_steps = 200  # None
@@ -75,7 +76,6 @@ if 'S1' in env_name:
     option_discovery_steps //= 5
     option_eval_training_steps //= 5
     max_env_steps /= 5  # None
-    learning_rate = 0.01
 
 if DEBUG:
     eval_test_restarts = 1
@@ -98,7 +98,7 @@ compact_observation = False
 
 visualize_all = 0
 enjoy_surrogate_reward = visualize_all or 0
-enjoy_master_learning = visualize_all or 0
+enjoy_master_learning = visualize_all or 1
 enjoy_learned_options = visualize_all or 0
 enjoy_option = visualize_all or 0
 enjoy_test = visualize_all or 0
@@ -117,3 +117,4 @@ tensorboard = tensorboardX.SummaryWriter(os.path.join('runs', experiment_name), 
 learn_epsilon = 0.1
 max_nr_options = 1
 option_trigger_treshold = 0.5
+option_termination_treshold = 1.0

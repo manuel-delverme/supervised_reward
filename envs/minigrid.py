@@ -16,7 +16,7 @@ class _MiniGrid(gym.Env):
         self.env = gym.make(self._env_name)
         if config.max_env_steps is not None:
             self.env.max_steps = config.max_env_steps
-        self.env.see_trough_walls = True
+        self.env.see_trough_walls = config.see_trough_walls
         self._observation_space = None
 
     def encode_observation(self, obs):

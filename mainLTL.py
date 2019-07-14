@@ -5,7 +5,6 @@ import config
 import envs.boxes
 import envs.hungry_thirsty
 import envs.minigrid
-import shared.constants as C
 import shared.utils
 from fitness import fitness_function
 
@@ -14,30 +13,49 @@ class LTLReward:
     def __init__(self, target_state):
         self.target_state = target_state
         self.state = {}
+        self.ltl_progress = 0
 
     def __repr__(self):
-        return f"reach {self.target_state}"
+        return f"reach {' >> '.join(str(el) for el in self.target_state)}"
 
     def __call__(self, new_state, environment):
         grid = environment.env.grid
+        achieved_states = sum(self.state.values())
+
         for cell in grid.grid:
             if cell is None:
                 continue
 
-            # def progress_condition(_cell):
-            #     return _cell.type == 'door' and _cell.is_open == self.door
-            # if progress_condition(cell):
-
             if cell.type == 'door':
                 self.state['door'] = cell.is_open
 
-                if self.state['door'] == self.target_state['door']:
-                    return 1.0
+            if cell.type == 'goal':
+                self.state['goal'] = all(cell.cur_pos == environment.agent_position_idx)
+
+        # what about:
+        # open door > step out > close door > reach goal?
+
+        completition = []
+        for key, value in self.target_state[self.ltl_progress].items():
+            completition.append(self.state[key] == value)
+
+        if all(completition):
+            self.ltl_progress += 1
+            if len(self.target_state) == self.ltl_progress:
+                return 1
+            return 0.1
+
+        elif sum(self.state.values()) > achieved_states:
+            return 0.1
         else:
             return -0.1
 
+    def reset(self):
+        self.ltl_progress = 0
+        self.state = {}
+
     def motivating_function(self):
-        return LTLReward(self.state.copy())
+        return LTLReward([self.state.copy()])
 
 
 class Search(object):
@@ -143,66 +161,20 @@ class Search(object):
         Search.test_open_door(reward_space_size)
 
     @staticmethod
-    def test_door_and_goal(reward_space_size):
-        # D 0 1 2 3 4  G 0 1 2 3 4
-        # 0 _ _ _ _ _  0 _ _ _ _ _
-        # 1 _ _ . _ _  1 _ _ . _ _
-        # 2 _ _ . 1 <  2 _ _ . 1 <
-        # 3 _ _ . _ _  3 _ _ . _ _
-        # 4 _ _ _ _ _  4 _ _ _ _ _
-        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.005
-        intrinsic_motivation = intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
-
-        intrinsic_motivation[C.DOOR_LAYER, config.agent_view_size // 2, -2] = 1
-        intrinsic_motivation[C.DOOR_LAYER, :, -3] = 0.1
-
-        intrinsic_motivation[C.FOOD_LAYER, config.agent_view_size // 2, -2] = 2
-        intrinsic_motivation[C.FOOD_LAYER, :, -3] = 0.2
-
-        door_fitness, _ = fitness_function(intrinsic_motivation.reshape(-1))  # raise errors
-        print('fitness with door and goal curiosity', door_fitness, intrinsic_motivation.reshape(-1), sep='\n')
-
-    @staticmethod
     def test_open_door(reward_space_size):
-
-        door_ltl = LTLReward({
+        door_ltl = LTLReward([{
             'door': True,
-        })
+        }])
         door_fitness, _ = fitness_function(door_ltl)  # raise errors
         print('fitness with open doors curiosity', door_fitness, 'door ltl')
 
     @staticmethod
-    def test_door_gradient(reward_space_size):
-        agent_row = config.agent_view_size // 2
-        middle = config.agent_view_size // 2
-
-        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.01
-        intrinsic_motivation = intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
-
-        intrinsic_motivation[C.DOOR_LAYER, agent_row, -2] = 1.0
-        intrinsic_motivation[C.UNWALKABLE_LAYER, agent_row - 1, -3] = 0.01
-        intrinsic_motivation[C.UNWALKABLE_LAYER, agent_row + 1, -3] = 0.01
-        door_fitness, _ = fitness_function(intrinsic_motivation.reshape(-1))  # raise errors
-        print('fitness with front doors curiosity', door_fitness, intrinsic_motivation, sep='\n')
-
-    @staticmethod
-    def test_door(reward_space_size):
-        # D 0 1 2 3 4  G 0 1 2 3 4
-        # 0 _ _ _ _ _  0 _ _ _ _ _
-        # 1 _ _ . _ _  1 _ _ . _ _
-        # 2 _ _ . 1 <  2 _ _ . 1 <
-        # 3 _ _ . _ _  3 _ _ . _ _
-        # 4 _ _ _ _ _  4 _ _ _ _ _
-
-        agent_row = config.agent_view_size // 2
-        middle = config.agent_view_size // 2
-
-        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.005
-        intrinsic_motivation = intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
-        intrinsic_motivation[C.DOOR_LAYER, agent_row, -2] = 1.0
-
-        door_fitness, _ = fitness_function(intrinsic_motivation.reshape(-1))  # raise errors
-        print('fitness with front doors curiosity', door_fitness, intrinsic_motivation, sep='\n')
+    def test_door_step_out(reward_space_size):
+        door_ltl = LTLReward([
+            {'door': True, 'goal': True},
+        ])
+        door_fitness, _ = fitness_function(door_ltl)  # raise errors
+        print('fitness step out fitness', door_fitness, 'ltl')
 
     def get_best_option_score(self):
         # options = [learners.approx_q_learning.generate_option(config.environment(), (4, 4, 0), False), ]

@@ -1,4 +1,5 @@
 import random
+import time
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -44,28 +45,64 @@ def enjoy_policy(environment, policy, reward_function=False):
     environment.render()
     environment.render()
     obs = environment.reset()
+    policy.reward_function.reset()
+    inspect = False
 
     while True:
         print(obs.reshape(-1, config.agent_view_size, config.agent_view_size))
-        print('values:',
-              *zip(('<', '>', 'foward', 'toggle'), policy.get_value(obs)),
-              sep='\n')
+
+        dt = []
+        for idx, (m, n, v) in enumerate(zip(policy.estimator.models, ('<', '>', 'foward', 'toggle'), policy.get_value(obs))):
+            if inspect:
+                w = m.regressor.weight.reshape(-1).detach().numpy()
+                w = np.multiply(w, obs.reshape(-1))
+                w = w.reshape(obs.shape)  # .transpose(1, 2, 0)
+
+                plt.suptitle(f'weights for action {n}')
+                for layer in range(w.shape[0]):
+                    plt.subplot(2, 2, layer + 1)
+                    plt.imshow(w[layer, :, :], vmin=w.min(), vmax=w.max())
+                    cbar = plt.colorbar()
+                plt.show()
+                b = m.regressor.bias.detach().numpy()
+            else:
+                b = None
+
+            dt.append((n, b, v))
+        plt.show()
+
+        print(*dt, sep='\n')
+
         action = policy.get_or_terminate(obs, environment)
-        environment.render()
 
         while action == -1:
             obs = environment.reset()
+            policy.reward_function.reset()
+
+            time.sleep(1)
             action = policy.get_or_terminate(obs, environment)
+            print('a', action, 'r', policy.reward_function)
 
         obs, reward, terminal, info = environment.step(action)
-        if reward_function:
-            print('reward:', reward_function(obs, environment))
 
-        cmd = input('q_to_exit, t to terminate, else step')
+        if reward_function:
+            reward = reward_function(obs, environment)
+            print('reward:', reward)
+            if reward == config.option_termination_treshold:
+                print('forcing terminal')
+                terminal = True
+                policy.reward_function.reset()
+
+        environment.render()
+        inspect = False
+        cmd = input('q_to_exit, t to terminate, i for inspect else step')
         if cmd == 'q':
             break
-        if cmd == 't':
+        if cmd == 't' or terminal:
             obs = environment.reset()
+            policy.reward_function.reset()
+        if cmd == 'i':
+            inspect = True
 
 
 def enjoy_surrogate_reward(environment, surrogate_reward):
