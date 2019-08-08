@@ -19,14 +19,29 @@ class Reward:
         return self.reward_vector.dot(image)
 
     def __str__(self):
-        surrogate_reward.reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size)
+        return str(self.reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size))
 
-    def motivating_function(self):
-        motivating_function = np.multiply(surrogate_reward.reward_vector, new_state.reshape(-1))
+    def __repr__(self):
+        return repr(self.reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size))
 
-        negative_rewards = surrogate_reward.reward_vector[surrogate_reward.reward_vector < 0]
+    def reset(self):
+        pass
+
+    def motivating_function(self, state):
+        class MotivatingFunction(Reward):
+            def __repr__(self):
+                representation = self.reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size)
+                # for layer in range(representation.shape[0]):
+                #     representation[layer]
+                # return repr()
+                return repr(representation)
+
+        motivating_function = np.multiply(self.reward_vector, state.reshape(-1))
+        negative_rewards = self.reward_vector[self.reward_vector < 0]
         # keep the punishments
-        motivating_function[surrogate_reward.reward_vector < 0] = negative_rewards
+        motivating_function[self.reward_vector < 0] = negative_rewards
+
+        return MotivatingFunction(motivating_function)
 
 
 class Search(object):
@@ -44,13 +59,12 @@ class Search(object):
         random_best = -float('inf')
         old_random_best = -float('inf')
 
-        self.test_intuitive_cases(self.reward_space_size)
-        return
-
         if config.DEBUG:
-            _ = fitness_function(self.random.randn(self.reward_space_size))  # raise errors
+            # self.test_intuitive_cases(self.reward_space_size)
+            _ = fitness_function(np.random.randn(self.reward_space_size))  # raise errors
 
         population = [np.random.randn(self.reward_space_size) for _ in range(config.population)]
+        print("HARDCODE INTRINSIC MOTIVATION SPACE TO FIT INTUITIVE SOLUTIONS")
         # fitness = self.get_best_option_score()
         # print(fitness)
 
@@ -129,7 +143,9 @@ class Search(object):
 
     @staticmethod
     def test_intuitive_cases(reward_space_size):
+        # Search.test_door(reward_space_size)
         Search.test_open_door(reward_space_size)
+        # Search.test_door_gradient(reward_space_size)
 
     @staticmethod
     def test_door_and_goal(reward_space_size):
@@ -153,14 +169,22 @@ class Search(object):
 
     @staticmethod
     def test_open_door(reward_space_size):
-        agent_row = config.agent_view_size // 2
+        # D 0 1 2 3 4  G 0 1 2 3 4
+        # 0 _ _ _ _ _  0 _ _ _ _ _
+        # 1 _ _ _ _ _  1 _ _ _ _ _
+        # 2 _ _ _ _ _  2 _ _ _ _ _
+        # 3 _ _ _ _ _  3 _ _ _ _ _
+        # 4 _ 1 * 1 _  4 _ _ _ _ _
+
+        agent_col = config.agent_view_size // 2
         middle = config.agent_view_size // 2
 
         intrinsic_motivation = np.ones(shape=reward_space_size) * -0.0000001
+        # intrinsic_motivation = np.ones(shape=reward_space_size) * -0.00001
         intrinsic_motivation = intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
 
-        intrinsic_motivation[C.DOOR_LAYER, agent_row, -2] = 0.55
-        intrinsic_motivation[C.WALKABLE_LAYER, agent_row, -2] = 0.1
+        intrinsic_motivation[C.UNWALKABLE_LAYER, -1, agent_col + 1] = 0.6
+        intrinsic_motivation[C.UNWALKABLE_LAYER, -1, agent_col - 1] = 0.6
 
         reward = Reward(reward_vector=intrinsic_motivation.reshape(-1))
         door_fitness, _ = fitness_function(reward)  # raise errors
@@ -168,36 +192,28 @@ class Search(object):
 
     @staticmethod
     def test_door_gradient(reward_space_size):
-        agent_row = config.agent_view_size // 2
-        middle = config.agent_view_size // 2
-
-        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.01
-        intrinsic_motivation = intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
-
-        intrinsic_motivation[C.DOOR_LAYER, agent_row, -2] = 1.0
-        intrinsic_motivation[C.UNWALKABLE_LAYER, agent_row - 1, -3] = 0.01
-        intrinsic_motivation[C.UNWALKABLE_LAYER, agent_row + 1, -3] = 0.01
-        door_fitness, _ = fitness_function(intrinsic_motivation.reshape(-1))  # raise errors
-        print('fitness with front doors curiosity', door_fitness, intrinsic_motivation, sep='\n')
+        pass
 
     @staticmethod
     def test_door(reward_space_size):
         # D 0 1 2 3 4  G 0 1 2 3 4
         # 0 _ _ _ _ _  0 _ _ _ _ _
-        # 1 _ _ . _ _  1 _ _ . _ _
-        # 2 _ _ . 1 <  2 _ _ . 1 <
-        # 3 _ _ . _ _  3 _ _ . _ _
-        # 4 _ _ _ _ _  4 _ _ _ _ _
+        # 1 _ _ _ _ _  1 _ _ _ _ _
+        # 2 _ _ _ _ _  2 _ _ _ _ _
+        # 3 _ _ _ _ _  3 _ _ _ _ _
+        # 4 _ 1 * 1 _  4 _ _ _ _ _
 
-        agent_row = config.agent_view_size // 2
+        agent_col = config.agent_view_size // 2
         middle = config.agent_view_size // 2
 
-        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.005
+        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.0000001
         intrinsic_motivation = intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
-        intrinsic_motivation[C.DOOR_LAYER, agent_row, -2] = 1.0
 
-        door_fitness, _ = fitness_function(intrinsic_motivation.reshape(-1))  # raise errors
-        print('fitness with front doors curiosity', door_fitness, intrinsic_motivation, sep='\n')
+        intrinsic_motivation[C.DOOR_LAYER, -2, agent_col] = 0.6
+
+        reward = Reward(reward_vector=intrinsic_motivation.reshape(-1))
+        door_fitness, _ = fitness_function(reward)  # raise errors
+        print('fitness with open doors curiosity', door_fitness, intrinsic_motivation, sep='\n')
 
     def get_best_option_score(self):
         # options = [learners.approx_q_learning.generate_option(config.environment(), (4, 4, 0), False), ]

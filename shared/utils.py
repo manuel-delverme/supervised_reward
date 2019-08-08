@@ -45,12 +45,14 @@ def enjoy_policy(environment, policy, reward_function=False):
     environment.render()
     environment.render()
     obs = environment.reset()
-    policy.reward_function.reset()
+    try:
+        policy.reward_function.reset()
+    except AttributeError:
+        pass
     inspect = False
 
     while True:
-        print(obs.reshape(-1, config.agent_view_size, config.agent_view_size))
-
+        # print(obs.reshape(-1, config.agent_view_size, config.agent_view_size))
         dt = []
         for idx, (m, n, v) in enumerate(zip(policy.estimator.models, ('<', '>', 'foward', 'toggle'), policy.get_value(obs))):
             if inspect:
@@ -93,7 +95,7 @@ def enjoy_policy(environment, policy, reward_function=False):
                 terminal = True
                 policy.reward_function.reset()
 
-        environment.render()
+        environment.render(observation=obs)
         inspect = False
         cmd = input('q_to_exit, t to terminate, i for inspect else step')
         if cmd == 'q':
@@ -106,12 +108,13 @@ def enjoy_policy(environment, policy, reward_function=False):
 
 
 def enjoy_surrogate_reward(environment, surrogate_reward):
-    environment.render()
+    obs = environment.reset()
+    environment.render(observation=obs)
+    environment.render(observation=obs)
     while True:
-        environment.render()
         while True:
             try:
-                action = ['a', 'd', 'w', 'e', 'q'].index(input('p'))
+                action = ['a', 'd', 'w', 'e', 'q'].index(input('take an action:'))
             except ValueError:
                 pass
             else:
@@ -121,12 +124,17 @@ def enjoy_surrogate_reward(environment, surrogate_reward):
             return
 
         new_state, env_reward, terminal, info = environment.step(action)
-        reward, terminal = update_reward(environment, new_state, True, env_reward, terminal, False, surrogate_reward)
-        print('updated reward from env', reward, 'real reward', env_reward, 'terminal', terminal)
+        reward, terminal = update_reward(environment, new_state, replace_reward=True, reward=env_reward, steps_since_last_restart=-1, terminal=terminal,
+                                         surrogate_reward=surrogate_reward, type_of_run='visualization')
+
+        with np.printoptions(precision=3, suppress=True):
+            print('updated reward from env', reward, 'real reward', env_reward, 'terminal', terminal)
+        environment.render(observation=new_state)
 
 
 def plot_surrogate_reward(environment, surrogate_reward):
-    print('enjoying reward', surrogate_reward, sep='\n')
+    with np.printoptions(precision=3, suppress=True):
+        print('enjoying reward', surrogate_reward, sep='\n')
 
     replace_reward = True
     terminate_on_surr_reward = False
@@ -140,7 +148,8 @@ def plot_surrogate_reward(environment, surrogate_reward):
         #     action = 2
 
         new_state, reward, terminal, info = environment.step(action)
-        reward, terminal = update_reward(environment, new_state, replace_reward, reward, terminal, terminate_on_surr_reward, surrogate_reward)
+        reward, terminal = update_reward(environment, new_state, replace_reward, reward, steps_since_last_restart=-1, surrogate_reward=surrogate_reward,
+                                         terminal=terminal, type_of_run='vizualization')
 
         if terminal:
             environment.reset()

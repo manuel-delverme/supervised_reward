@@ -2,9 +2,6 @@ import numpy as np
 import tqdm
 
 import config
-import envs.boxes
-import envs.hungry_thirsty
-import envs.minigrid
 import shared.utils
 from fitness import fitness_function
 
@@ -16,7 +13,7 @@ class LTLReward:
         self.ltl_progress = 0
 
     def __repr__(self):
-        return f"reach {' >> '.join(str(el) for el in self.target_state)}"
+        return f"reach {' >> '.join(str([(k, els[k]) for k in sorted(els.keys())]) for els in self.target_state)}"
 
     def __call__(self, new_state, environment):
         grid = environment.env.grid
@@ -34,7 +31,6 @@ class LTLReward:
 
         # what about:
         # open door > step out > close door > reach goal?
-
         completition = []
         for key, value in self.target_state[self.ltl_progress].items():
             completition.append(self.state[key] == value)
@@ -42,11 +38,11 @@ class LTLReward:
         if all(completition):
             self.ltl_progress += 1
             if len(self.target_state) == self.ltl_progress:
-                return 1
+                return config.option_termination_treshold
             return 0.1
 
         elif sum(self.state.values()) > achieved_states:
-            return 0.1
+            return config.option_trigger_treshold
         else:
             return -0.1
 
@@ -158,31 +154,23 @@ class Search(object):
 
     @staticmethod
     def test_intuitive_cases(reward_space_size):
-        Search.test_open_door(reward_space_size)
+        Search.test_door_goal()
 
     @staticmethod
-    def test_open_door(reward_space_size):
-        door_ltl = LTLReward([{
-            'door': True,
-        }])
-        door_fitness, _ = fitness_function(door_ltl)  # raise errors
+    def test_door():
+        target_state = LTLReward([
+            {'door': True, }
+        ])
+        door_fitness, _ = fitness_function(target_state)
         print('fitness with open doors curiosity', door_fitness, 'door ltl')
 
     @staticmethod
-    def test_door_step_out(reward_space_size):
-        door_ltl = LTLReward([
+    def test_door_goal():
+        target_state = LTLReward([
             {'door': True, 'goal': True},
         ])
-        door_fitness, _ = fitness_function(door_ltl)  # raise errors
+        door_fitness, _ = fitness_function(target_state)
         print('fitness step out fitness', door_fitness, 'ltl')
-
-    def get_best_option_score(self):
-        # options = [learners.approx_q_learning.generate_option(config.environment(), (4, 4, 0), False), ]
-        # options = [learners.approx_q_learning.generate_option(config.environment(), (6, 6, 0), False), ]
-        print("eval options", str(sorted([str(o) for o in options]))[:50], end=' ')
-        fitness = shared.eval_options(envs.minigrid.MiniGrid(), options)
-        print(config.option_eval_training_steps, fitness)
-        return fitness
 
     @staticmethod
     def eval_solutions(_fitness_function, solutions):

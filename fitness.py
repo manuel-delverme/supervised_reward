@@ -8,7 +8,6 @@ nr_fitness_calls = 0
 def fitness_function(intrinsic_reward_function):
     global nr_fitness_calls
 
-    generate_options = True
     mdp = config.environment()
 
     if intrinsic_reward_function is None:
@@ -21,7 +20,7 @@ def fitness_function(intrinsic_reward_function):
         nr_fitness_calls += 1
         options, _, _, _ = learners.approx_q_learning.learn(
             environment=mdp, surrogate_reward=intrinsic_reward_function, training_steps=config.option_discovery_steps,
-            generate_options=generate_options, eval_fitness=False, log_postfix=f'generate_options_nr_{nr_fitness_calls}')
+            generate_options=True, eval_fitness=False, log_postfix=f'generate_options_nr_{nr_fitness_calls}')
 
     env = config.environment()
     fitness = shared.utils.eval_options(env, options)
