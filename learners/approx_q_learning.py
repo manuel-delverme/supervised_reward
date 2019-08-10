@@ -1,4 +1,5 @@
 import collections
+import copy
 import os
 import random
 import time
@@ -156,7 +157,6 @@ def pick_action(observation, old_action_idx, old_primitive_action, is_option, en
 
     if was_option and old_primitive_action != shared.constants.TERMINATE_OPTION and time_steps_under_option < config.max_option_duration:
         # keep following the option
-        print('following option')
         primitive_action_idx = available_actions[old_action_idx].get_or_terminate(observation, environment)
         action_idx = old_action_idx
         action_value = [-1]
@@ -179,15 +179,11 @@ def pick_action(observation, old_action_idx, old_primitive_action, is_option, en
         if is_option(action_idx):
             primitive_action_idx = available_actions[action_idx].get_or_terminate(observation, environment)
             if primitive_action_idx == shared.constants.TERMINATE_OPTION:
-                print('option terminates')
                 action_idx = random_sample(available_actions, is_option, observation, environment)
-                print('replacing action w/', action_idx)
                 if is_option(action_idx):
                     primitive_action_idx = available_actions[action_idx].get_or_terminate(observation, environment)
-                    print('replacing primitive action w/', primitive_action_idx)
                 else:
                     primitive_action_idx = action_idx
-                print('replacing primitive action w/', primitive_action_idx)
                 action_value = [-1]
 
         else:
@@ -262,7 +258,7 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
     primitive_action = None
     learned_options = set()
 
-    if surrogate_reward is not None and (config.enjoy_surrogate_reward):  # or (config.enjoy_option and not generate_options)):
+    if surrogate_reward is not None and config.enjoy_surrogate_reward:  # or (config.enjoy_option and not generate_options)):
         environment.reset()
         print('plotting', type_of_run)
         shared.utils.plot_surrogate_reward(environment, surrogate_reward)
@@ -342,12 +338,14 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
 
         old_state = new_state
 
-    if eval_fitness:
+    if eval_fitness or True:
         print('testing')
         with torch.no_grad():
             test_fitness = test(
                 environment=environment, estimator=estimator, eval_steps=config.option_eval_test_steps, render=False, is_option=is_option,
-                available_actions=available_actions[:nr_usable_actions])
+                available_actions=available_actions[:nr_usable_actions],
+                update_reward=lambda s, r, t: update_reward(environment, s, replace_reward, r, steps_since_last_restart, surrogate_reward, t, type_of_run)
+            )
             print('tested')
     else:
         test_fitness = None
@@ -390,7 +388,7 @@ def maybe_render_train(action_idx, action_value, available_actions, environment,
     if (
             type_of_run == 'eval' and config.enjoy_master_learning and step > (training_steps - 500)
     ) or (
-            type_of_run == 'option' and config.enjoy_option_learning and step > (training_steps - 500)
+            type_of_run == 'option' and config.enjoy_option_learning and step > (training_steps - 50)
     ):
         action_names = ('<', '>', 'foward', 'toggle', *range(len(available_actions) - 4))
         action_value_ = []
@@ -398,9 +396,9 @@ def maybe_render_train(action_idx, action_value, available_actions, environment,
             action_value_.append(str(z))
 
         environment.render(type_of_run=type_of_run, reward=reward, step=step, action_idx=action_idx, action_value=action_value_, observation=new_state)
-        # time.sleep(0.2)
+        time.sleep(0.2)
         if terminal:
-            time.sleep(0.1)
+            time.sleep(0.5)
 
 
 def update_non_surrogate_metrics(cumulative_real_reward, fitness, logger, option_nr, reward, step):
@@ -469,7 +467,7 @@ def fancy_render(environment, estimator, seen_rewards, step):
     plt.show()
 
 
-def test(environment, eval_steps, *, estimator=None, render=False, is_option=None, available_actions=None):
+def test(environment, eval_steps, *, estimator=None, render=False, is_option=None, available_actions=None, update_reward=None):
     cumulative_reward = 0
     fitness = 0
     primitive_action_idx = None
@@ -497,6 +495,7 @@ def test(environment, eval_steps, *, estimator=None, render=False, is_option=Non
         cumulative_reward += reward
 
         fitness += 1 if reward > 0 else 0
+        reward, terminal = update_reward(new_state, reward, terminal)
 
         if terminal:
             environment.reset()
@@ -518,7 +517,7 @@ def learn_option(option_reward, mdp, *, training_steps=config.option_train_steps
         environment=mdp, options=False, surrogate_reward=option_reward, training_steps=training_steps, eval_fitness=False,
         replace_reward=True, option_nr=option_nr, log_postfix=f'learn_option{option_nr}')
 
-    option = CachedPolicy(estimator, reward_function=option_reward)
+    option = CachedPolicy(copy.deepcopy(estimator), reward_function=option_reward)
     if config.enjoy_learned_options:
         with np.printoptions(precision=3, suppress=True):
             print(f'learned option[{option_nr}] for GOAL:', option_reward)

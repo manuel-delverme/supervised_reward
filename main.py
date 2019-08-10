@@ -44,6 +44,27 @@ class Reward:
         return MotivatingFunction(motivating_function)
 
 
+class ConstrainedReward(Reward):
+    def __init__(self, reward_parameters):
+        points = reward_parameters.reshape(-1, 3)
+        reward = np.ones(shape=(config.Minigrid.nr_layers, config.agent_view_size, config.agent_view_size)) * -0.005
+        for layer, x, y in points:
+            x *= config.agent_view_size / 2
+            x += config.agent_view_size / 2
+            x = np.clip(x, 0, config.agent_view_size - 1)
+
+            y *= config.agent_view_size / 2
+            y += config.agent_view_size / 2
+            y = np.clip(y, 0, config.agent_view_size - 1)
+
+            layer *= config.Minigrid.nr_layers
+            layer += config.Minigrid.nr_layers / 2
+            layer = np.clip(layer, 0, config.Minigrid.nr_layers - 1)
+
+            reward[int(layer), int(x), int(y)] = 1
+        self.reward_vector = reward.reshape(-1)
+
+
 class Search(object):
     def __init__(self, population_size=config.population):
         print("init")
@@ -51,7 +72,7 @@ class Search(object):
         _e = config.environment()
         obs = _e.reset()
         reward_space_size = obs.reshape(-1).shape[0]
-        self.reward_space_size = reward_space_size
+        self.reward_space_size = 3  # reward_space_size
         print("init done")
 
     def optimize(self):
@@ -59,9 +80,10 @@ class Search(object):
         random_best = -float('inf')
         old_random_best = -float('inf')
 
+        self.test_intuitive_cases(self.reward_space_size)
         if config.DEBUG:
-            # self.test_intuitive_cases(self.reward_space_size)
-            _ = fitness_function(np.random.randn(self.reward_space_size))  # raise errors
+            # _ = fitness_function(Reward(np.random.randn(self.reward_space_size)))  # raise errors
+            _ = fitness_function(ConstrainedReward(np.random.randn(self.reward_space_size)))  # raise errors
 
         population = [np.random.randn(self.reward_space_size) for _ in range(config.population)]
         print("HARDCODE INTRINSIC MOTIVATION SPACE TO FIT INTUITIVE SOLUTIONS")
@@ -144,7 +166,7 @@ class Search(object):
     @staticmethod
     def test_intuitive_cases(reward_space_size):
         # Search.test_door(reward_space_size)
-        Search.test_open_door(reward_space_size)
+        Search.test_open_door(config.Minigrid.nr_layers * config.agent_view_size * config.agent_view_size)
         # Search.test_door_gradient(reward_space_size)
 
     @staticmethod
@@ -179,12 +201,13 @@ class Search(object):
         agent_col = config.agent_view_size // 2
         middle = config.agent_view_size // 2
 
-        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.0000001
+        intrinsic_motivation = np.ones(shape=reward_space_size) * -0.00001
         # intrinsic_motivation = np.ones(shape=reward_space_size) * -0.00001
         intrinsic_motivation = intrinsic_motivation.reshape(-1, config.agent_view_size, config.agent_view_size)
 
-        intrinsic_motivation[C.UNWALKABLE_LAYER, -1, agent_col + 1] = 0.6
-        intrinsic_motivation[C.UNWALKABLE_LAYER, -1, agent_col - 1] = 0.6
+        intrinsic_motivation[C.DOOR_LAYER, -2, agent_col] = 1.1
+        # intrinsic_motivation[C.UNWALKABLE_LAYER, -1, agent_col + 1] = 0.6
+        # intrinsic_motivation[C.UNWALKABLE_LAYER, -1, agent_col - 1] = 0.6
 
         reward = Reward(reward_vector=intrinsic_motivation.reshape(-1))
         door_fitness, _ = fitness_function(reward)  # raise errors

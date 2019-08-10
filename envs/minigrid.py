@@ -8,10 +8,9 @@ import numpy as np
 import config
 
 
-class _MiniGrid(gym.Env):
-    def __init__(self, *task_parameters):
+class MiniGrid(gym.Env):
+    def __init__(self):
         super().__init__()
-        del task_parameters
         self._env_name = config.env_name
         self.env = gym.make(self._env_name)
         if config.max_env_steps is not None:
@@ -25,17 +24,19 @@ class _MiniGrid(gym.Env):
         doors = image == 4  # door
         opens = np.logical_not(obs['image'][:, :, 2])  # door
 
-        info_map = np.zeros(shape=(4, *obs['image'].shape[:-1]))
+        info_map = np.zeros(shape=(config.Minigrid.nr_layers, *obs['image'].shape[:-1]))
 
-        # empty # floor; where you can go
-        info_map[C.WALKABLE_LAYER, :, :] = np.logical_or(np.logical_or(image == 3, image == 1), image == 8).astype(np.int8)
+        # # empty # floor; where you can go
+        # info_map[C.WALKABLE_LAYER, :, :] = np.logical_or(np.logical_or(image == 3, image == 1), image == 8).astype(np.int8)
 
         # wall and unseen are walls; where you can not go
-        info_map[C.UNWALKABLE_LAYER, :, :] = np.logical_or(image == 2, image == 0)
+        # info_map[C.UNWALKABLE_LAYER, :, :] = np.logical_or(image == 2, image == 0)
+        info_map[C.UNWALKABLE_LAYER, :, :] = image == 2
 
-        # info_map[:, :, 0] = np.logical_or(info_map[:, :, 0], image[:, :, 0] == 3)
-        # you can go in open doors
-        info_map[C.WALKABLE_LAYER, :, :][np.logical_and(doors, opens)] = 1
+        # # info_map[:, :, 0] = np.logical_or(info_map[:, :, 0], image[:, :, 0] == 3)
+        # # you can go in open doors
+        # info_map[C.WALKABLE_LAYER, :, :][np.logical_and(doors, opens)] = 1
+
         # you can not go in not open doors
         info_map[C.UNWALKABLE_LAYER, :, :][np.logical_and(doors, np.logical_not(opens))] = 1
         # you can interact with closed doors
@@ -47,7 +48,7 @@ class _MiniGrid(gym.Env):
             info_map[layer] = np.flip(np.rot90(info_map[layer, :, :], 3), 1)
 
         assert info_map.max() == 1 and info_map.min() == 0
-        assert info_map[3, :, :].sum() <= 1
+        assert info_map[C.FOOD_LAYER, :, :].sum() <= 1
 
         info_map.flags.writeable = False
         return info_map
@@ -97,63 +98,3 @@ class _MiniGrid(gym.Env):
     def __str__(self):
         return self.__repr__()
 
-
-class MiniGrid(_MiniGrid):
-    def __init__(self, *task_parameters):
-        self.ob_rms = False
-        super().__init__(*task_parameters)
-        clipob = 10.
-        cliprew = 10.
-        gamma = 0.99
-        epsilon = 1e-8
-
-        self.training = True
-        obs = self.reset()
-        # self.ob_rms = RunningMeanStd(shape=obs.shape)
-        # self.ret_rms = RunningMeanStd(shape=())
-        self.ret_rms = False
-        self.clipob = clipob
-        self.cliprew = cliprew
-        self.ret = 0
-        self.gamma = gamma
-        self.epsilon = epsilon
-
-    def step(self, action):
-        obs, rew, done, info = super().step(action)
-
-        self.ret = self.ret * self.gamma + rew
-        obs = self._obfilt(obs)
-        if self.ret_rms:
-            self.ret_rms.update(np.array([self.ret]))
-            rew = np.clip(rew / np.sqrt(self.ret_rms.var + self.epsilon), -self.cliprew, self.cliprew)
-
-        if done:
-            self.ret = 0.
-        return obs, rew, done, info
-
-    def _obfilt(self, obs):
-        if not self.ob_rms:
-            return obs
-
-        if self.training:
-            self.ob_rms.update(obs)
-        obs = np.clip((obs - self.ob_rms.mean) / np.sqrt(self.ob_rms.var + self.epsilon), -self.clipob, self.clipob)
-        return obs
-
-    def reset(self):
-        obs = super().reset()
-        return self._obfilt(obs)
-
-    def train(self):
-        self.training = True
-
-    def eval(self):
-        self.training = False
-
-    def reset(self):
-        """
-        Reset all environments
-        """
-        obs = super().reset()
-        filtered_obs = self._obfilt(obs)
-        return filtered_obs

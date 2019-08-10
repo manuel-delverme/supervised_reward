@@ -33,12 +33,15 @@ class CachedPolicy:
 
     def _get(self, image):
         obs_hash = shared.utils.hash_image(image)
-        if obs_hash not in self.cache:
-            q_values = self.estimator.predict(image)
-            action_idx = int(np.argmax(q_values))
-            self.cache[obs_hash] = action_idx
+        # if obs_hash not in self.cache:
+        #     q_values = self.estimator.predict(image)
+        #     action_idx = int(np.argmax(q_values))
+        #     self.cache[obs_hash] = action_idx
 
-        action_idx = self.cache[obs_hash]
+        q_values = self.estimator.predict(image)
+        action_idx = int(np.argmax(q_values))
+        # self.cache[obs_hash] = action_idx
+        # action_idx = self.cache[obs_hash]
         assert action_idx == int(np.argmax(self.estimator.predict(image)))
         return action_idx
 

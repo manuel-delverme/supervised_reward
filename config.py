@@ -13,6 +13,7 @@ import os
 import tensorboardX
 import torch
 
+seed = 31337  # this is used in  gym-minigrid/gym_minigrid/minigrid.py
 agent_view_size = 5  # 7
 import envs.minigrid
 
@@ -52,6 +53,8 @@ if not DEBUG and HASGUI:
         if response is None:
             DEBUG = True
 
+DEBUG = False
+
 experiment_name = f'{response}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
 if len(sys.argv) > 1:
     experiment_name = f'{sys.argv[1]}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
@@ -68,7 +71,7 @@ option_train_steps = 10005
 
 evolution_iters = 150004
 max_env_steps = 200
-max_train_option_steps = 10
+max_train_option_steps = 50
 learning_rate = 1e-3
 
 if 'S1' in env_name:
@@ -102,9 +105,9 @@ enjoy_surrogate_reward = visualize_all or 0
 enjoy_master_learning = visualize_all or 0
 enjoy_option_learning = visualize_all or 0
 
-enjoy_learned_options = visualize_all or 0
-enjoy_option = visualize_all or 0
-enjoy_test = visualize_all or 0
+enjoy_learned_options = visualize_all or 1
+enjoy_option = visualize_all or 1
+enjoy_test = visualize_all or 1
 
 disable_tqdm = False
 
@@ -116,6 +119,13 @@ print('EXPERIMENT:', experiment_name)
 #         pass
 # tensorboard = fake_writer()
 tensorboard = tensorboardX.SummaryWriter(os.path.join('runs', experiment_name), flush_secs=1)
+
+
+class Minigrid:
+    gamma = 0.99
+    epsilon = 1e-8
+    nr_layers = 3
+
 
 learn_epsilon = 0.1
 max_nr_options = 2
