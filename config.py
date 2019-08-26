@@ -51,9 +51,8 @@ if not DEBUG and HASGUI:
         pass
     else:
         if response is None:
-            DEBUG = True
-
-DEBUG = False
+            response = "DELETEME"
+            # DEBUG = True
 
 experiment_name = f'{response}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
 if len(sys.argv) > 1:
@@ -64,10 +63,10 @@ repeat_eval_options = 1 if DEBUG else 1
 fitness_training_steps = None
 eval_test_restarts = 1  # 0
 
-option_discovery_steps = 10001
+option_discovery_steps = 10002
 option_eval_test_steps = 5003
 option_eval_training_steps = 20002
-option_train_steps = 10005
+option_train_steps = 100005
 
 evolution_iters = 150004
 max_env_steps = 200
@@ -75,17 +74,19 @@ max_train_option_steps = 50
 learning_rate = 1e-3
 
 if 'S1' in env_name:
+    print("DECIMATING TIMES BECAUSE S1")
     option_train_steps //= 10
     option_discovery_steps //= 5
     option_eval_training_steps //= 5
     max_env_steps /= 5  # None
 
 if DEBUG:
+    print("DECIMATING TIMES BECAUSE DEBUG")
     eval_test_restarts = 1
-    option_train_steps = 10
-    option_discovery_steps //= 5
+    option_train_steps //= 10
+    option_discovery_steps //= 100
     option_eval_training_steps //= 10
-    # option_eval_test_steps //= 10
+    option_eval_test_steps //= 10
     evolution_iters = 10
 
 # main.env_name = "debug"
@@ -105,11 +106,11 @@ enjoy_surrogate_reward = visualize_all or 0
 enjoy_master_learning = visualize_all or 0
 enjoy_option_learning = visualize_all or 0
 
-enjoy_learned_options = visualize_all or 1
-enjoy_option = visualize_all or 1
-enjoy_test = visualize_all or 1
+enjoy_learned_options = visualize_all or 0
+enjoy_option = visualize_all or 0
+enjoy_test = visualize_all or 0
 
-disable_tqdm = False
+disable_tqdm = True
 
 population = 2
 
@@ -133,3 +134,13 @@ option_trigger_treshold = 1.0
 option_termination_treshold = option_trigger_treshold
 max_option_duration = 5
 BATCH_SIZE = 64
+
+print({
+    'option_discovery_steps': option_discovery_steps,
+    'option_eval_test_steps': option_eval_test_steps,
+    'option_eval_training_steps': option_eval_training_steps,
+    'option_train_steps': option_train_steps,
+    'max_train_option_steps': max_train_option_steps,
+})
+
+no_variance = True

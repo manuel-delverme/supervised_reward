@@ -1,3 +1,5 @@
+import multiprocessing
+
 import numpy as np
 import tqdm
 
@@ -45,27 +47,45 @@ class Reward:
 
 
 class ConstrainedReward(Reward):
-    def __init__(self, reward_parameters):
+    def __init__(self, reward_parameters, normalize=True):
+        self.reward_parameters = reward_parameters
+        self.reward_coords = []
         points = reward_parameters.reshape(-1, 3)
         reward = np.ones(shape=(config.Minigrid.nr_layers, config.agent_view_size, config.agent_view_size)) * -0.005
         for layer, x, y in points:
-            x *= config.agent_view_size / 2
-            x += config.agent_view_size / 2
-            x = np.clip(x, 0, config.agent_view_size - 1)
+            if normalize:
+                x *= config.agent_view_size / 2
+                x += config.agent_view_size / 2
+                x = np.clip(x, 0, config.agent_view_size - 1)
 
-            y *= config.agent_view_size / 2
-            y += config.agent_view_size / 2
-            y = np.clip(y, 0, config.agent_view_size - 1)
+                y *= config.agent_view_size / 2
+                y += config.agent_view_size / 2
+                y = np.clip(y, 0, config.agent_view_size - 1)
 
-            layer *= config.Minigrid.nr_layers
-            layer += config.Minigrid.nr_layers / 2
-            layer = np.clip(layer, 0, config.Minigrid.nr_layers - 1)
-
+                layer *= config.Minigrid.nr_layers
+                layer += config.Minigrid.nr_layers / 2
+                layer = np.clip(layer, 0, config.Minigrid.nr_layers - 1)
             reward[int(layer), int(x), int(y)] = 1
+            self.reward_coords.extend([int(layer), int(x), int(y)])
+
         self.reward_vector = reward.reshape(-1)
 
+    def mutate(self):
+        return self.reward_parameters + np.random.randn(*self.reward_parameters.shape) / 10
 
-class Search(object):
+
+def maybe_multiprocess(population):
+    if config.DEBUG:
+        with multiprocessing.Pool() as pool:
+            retr = pool.map(fitness_function, population)
+    else:
+        retr = [fitness_function(p) for p in population]
+
+    population_fitness, options = zip(*retr)
+    return population_fitness
+
+
+class Search:
     def __init__(self, population_size=config.population):
         print("init")
         self.population_size = population_size
@@ -76,92 +96,50 @@ class Search(object):
         print("init done")
 
     def optimize(self):
-        old_fbest = -float('inf')
-        random_best = -float('inf')
-        old_random_best = -float('inf')
+        # self.test_intuitive_cases(self.reward_space_size)
+        # if config.DEBUG:
+        #     _ = fitness_function(ConstrainedReward(np.random.randn(self.reward_space_size)))  # raise errors
 
-        self.test_intuitive_cases(self.reward_space_size)
-        if config.DEBUG:
-            # _ = fitness_function(Reward(np.random.randn(self.reward_space_size)))  # raise errors
-            _ = fitness_function(ConstrainedReward(np.random.randn(self.reward_space_size)))  # raise errors
+        population = self.generate_initial_population()
 
-        population = [np.random.randn(self.reward_space_size) for _ in range(config.population)]
-        print("HARDCODE INTRINSIC MOTIVATION SPACE TO FIT INTUITIVE SOLUTIONS")
-        # fitness = self.get_best_option_score()
-        # print(fitness)
+        for optimization_iteration in tqdm.tqdm(range(config.evolution_iters)):
+            population_fitness = self.calculate_fitness(population)
 
-        # print('eval baseline: ', end='')
-        # baseline, _ = fitness_function(None)
-        # print(baseline)
-        im_number = 0
+            best_sample, best_fitness = max(zip(population, population_fitness), key=lambda x: x[1])
+            self.mutate(best_sample, population)
 
-        fitness_list = map(fitness_function, population)
-
-        for ind, fit in zip(population, fitness_list):
-            shared.plot_intinsic_motivation(np.array(ind), (-1, config.agent_view_size, config.agent_view_size), im_number)
-            im_number += 1
-
-            ind.fitness.values = (fit[0],)
-            ind.statistics['options'] = fit[1]
-
-        for optimization_iteration in tqdm.tqdm(range(config.evolution_iters), desc="optimization"):
-
-            # solutions = self.solver.ask(number=self.population_size)
-            selected_solutions = self._toolbox.select(population)  # , k=len(population))
-            population = deap.algorithms.varAnd(selected_solutions, self._toolbox, cxpb, mutpb)
-
-            # fitness_list, options = self.eval_solutions(fitness_function, mdp_parameters, solutions)
-
-            # udpate the new mutated individuals
-            invalids = [ind for ind in population if not ind.fitness.valid]
-            fitness_list = list(self._toolbox.map(self._toolbox.evaluate, invalids))
-
-            # self.solver.tell(solutions, -fitness_list, copy=True)
-            for ind, fit in zip(invalids, fitness_list):
-                ind.fitness.values = (fit[0],)
-                ind.statistics['options'] = fit[1]
-                shared.plot_intinsic_motivation(np.array(ind), (-1, config.agent_view_size, config.agent_view_size), im_number)
-                im_number += 1
-
-            hall_of_fame.update(population)
-
-            random_solutions = np.random.randn(self.population_size, self.reward_space_size) - 2
-            random_fitness_list, random_options = self.eval_solutions(fitness_function, random_solutions)
-
-            # xbest = self.solver.result.xbest
-            # fbest = self.solver.result.fbest
-
-            # xbest = np.array(list(hall_of_fame[0]))
-            best_element = hall_of_fame[0]
-            fbest = best_element.fitness.values[0]
-            best_options = best_element.statistics['options']
-
-            random_best = max(random_best, float(random_fitness_list.max()))
-            assert random_best >= old_random_best
-            old_random_best = random_best
-
-            stats = self.statistics.compile(population)
-
-            config.tensorboard.add_scalar('optimization/mean', stats['mean'], optimization_iteration)
-            config.tensorboard.add_scalar('optimization/min', stats['min'], optimization_iteration)
-            config.tensorboard.add_scalar('optimization/max', stats['max'], optimization_iteration)
-            config.tensorboard.add_scalar('optimization/std', stats['std'], optimization_iteration)
-            config.tensorboard.add_scalar('optimization/best', fbest, optimization_iteration)
-            config.tensorboard.add_scalar('optimization/nr_options_best', len(best_options), optimization_iteration)
-            # config.tensorboard.add_histogram('optimization/sigmas', self.solver.sm.variances, optimization_iteration)
-
-            config.tensorboard.add_scalar('optimization/random_mean', random_fitness_list.mean(), optimization_iteration)
-            config.tensorboard.add_scalar('optimization/random_min', random_fitness_list.min(), optimization_iteration)
-            config.tensorboard.add_scalar('optimization/random_max', random_fitness_list.max(), optimization_iteration)
-            # config.tensorboard.add_scalar('optimization/random_var', random_fitness_list.var(), optimization_iteration)
-            config.tensorboard.add_scalar('optimization/random_best', random_best, optimization_iteration)
-
-            config.tensorboard.add_scalar('optimization/baseline', baseline, optimization_iteration)
-
-            if old_fbest != fbest:
-                old_fbest = fbest
+            config.tensorboard.add_scalar('optimization/mean', np.array(population_fitness).mean(), optimization_iteration)
+            config.tensorboard.add_scalar('optimization/best', best_fitness, optimization_iteration)
 
         return None, None
+
+    def calculate_fitness(self, population):
+        population_fitness = maybe_multiprocess(population)
+
+        # population_fitness, options = zip(*[fitness_function(p) for p in population])
+        print("")
+        print("==RESULTS==")
+        for r, fit in zip(population, population_fitness):
+            print(f"{r.reward_coords} achieved fit {fit}")
+        return population_fitness
+
+    def mutate(self, best_sample, population):
+        for idx, p in enumerate(population):
+            if p == best_sample:
+                continue
+            new_parameters = best_sample.mutate()
+            population[idx] = ConstrainedReward(new_parameters)
+            print('newly generated reward params', population[idx].reward_parameters)
+
+    def generate_initial_population(self):
+        population = [ConstrainedReward(np.random.randn(self.reward_space_size)) for _ in range(config.population)]
+        population[0] = ConstrainedReward(np.array([
+            C.DOOR_LAYER, (config.agent_view_size - 2), (config.agent_view_size // 2)
+        ]), normalize=False)
+        print("==INITIAL POPULATION==")
+        for r in population:
+            print(f"{r.reward_coords}")
+        return population
 
     @staticmethod
     def test_intuitive_cases(reward_space_size):

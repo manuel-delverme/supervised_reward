@@ -211,13 +211,14 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
           training_steps=None, replace_reward=config.replace_reward, eval_fitness=True, option_nr=-1, log_postfix=''):
     if generate_options:
         type_of_run = 'discovery'
-        position = 1
+        position = 0
     else:
         if eval_fitness:
             type_of_run = 'eval'
+            position = 2
         else:
             type_of_run = 'option'
-        position = 0
+            position = 1
 
     logger = tensorboardX.SummaryWriter(os.path.join('runs', config.experiment_name, log_postfix), flush_secs=1)
 
@@ -233,7 +234,7 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
             action_to_id[option] = len(action_to_id)
 
     nr_usable_actions = len(available_actions)  # disallow learned options to be used
-    print('nr available actions', nr_usable_actions)
+    # print('nr available actions', nr_usable_actions)
     estimator = PytorchEstimator(environment.action_space.n + len(options or []), observation_size=environment.observation_space.n, nr_usable_actions=nr_usable_actions)
 
     def make_is_option(num_actions):
@@ -260,11 +261,11 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
 
     if surrogate_reward is not None and config.enjoy_surrogate_reward:  # or (config.enjoy_option and not generate_options)):
         environment.reset()
-        print('plotting', type_of_run)
+        # print('plotting', type_of_run)
         shared.utils.plot_surrogate_reward(environment, surrogate_reward)
         environment.reset()
 
-        print('enjoying', type_of_run)
+        # print('enjoying', type_of_run)
         shared.utils.enjoy_surrogate_reward(environment, surrogate_reward)
 
     desc = f"Training {type_of_run}, option nr {option_nr}"
@@ -338,15 +339,15 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
 
         old_state = new_state
 
-    if eval_fitness or True:
-        print('testing')
+    if eval_fitness:
+        # print('testing')
         with torch.no_grad():
             test_fitness = test(
                 environment=environment, estimator=estimator, eval_steps=config.option_eval_test_steps, render=False, is_option=is_option,
                 available_actions=available_actions[:nr_usable_actions],
                 update_reward=lambda s, r, t: update_reward(environment, s, replace_reward, r, steps_since_last_restart, surrogate_reward, t, type_of_run)
             )
-            print('tested')
+            # print('tested')
     else:
         test_fitness = None
 
@@ -374,12 +375,13 @@ def generate_new_option(estimator, available_actions, environment, generate_opti
         option_hash = hash_option(motivating_function)
 
         if option_hash not in learned_options:
-            with np.printoptions(precision=3, suppress=True):
-                # with np.set_printoptions(precision=3):
-                print('generating sub option', motivating_function)
+            # with np.printoptions(precision=3, suppress=True):
+            #     # with np.set_printoptions(precision=3):
+            #     print('generating sub option', motivating_function)
             new_option = learn_option(motivating_function, environment, option_nr=len(learned_options))
+
             learned_options.add(option_hash)
-            available_actions.append(new_option)
+            available_actions.append(copy.deepcopy(new_option))
             estimator.add_new_action()
     return new_option, available_actions, estimator
 
@@ -518,6 +520,7 @@ def learn_option(option_reward, mdp, *, training_steps=config.option_train_steps
         replace_reward=True, option_nr=option_nr, log_postfix=f'learn_option{option_nr}')
 
     option = CachedPolicy(copy.deepcopy(estimator), reward_function=option_reward)
+
     if config.enjoy_learned_options:
         with np.printoptions(precision=3, suppress=True):
             print(f'learned option[{option_nr}] for GOAL:', option_reward)
