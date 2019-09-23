@@ -54,11 +54,11 @@ class CachedPolicy:
             self.cache[obs_hash] = action_idx
         return self.cache[obs_hash]
 
-    def __str__(self):
-        return self.reward_vector.__str__()
+    # def __str__(self):
+    #     return self.reward_vector.__str__()
 
-    def __repr__(self):
-        return self.reward_vector.__str__()
+    # def __repr__(self):
+    #     return self.reward_vector.__str__()
 
 
 def is_terminate_option(skill, old_state):

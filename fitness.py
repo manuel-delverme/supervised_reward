@@ -2,23 +2,22 @@ import config
 import learners.approx_q_learning
 import shared.utils
 
-nr_fitness_calls = 0
-
 
 def fitness_function(intrinsic_reward_function):
-    global nr_fitness_calls
+    if intrinsic_reward_function.fitness is None or config.recalculate_fitness:
+        mdp = config.environment()
 
-    mdp = config.environment()
+        # generate options in that
+        options, _, _, _ = learners.approx_q_learning.learn(
+            environment=mdp, surrogate_reward=intrinsic_reward_function, training_steps=config.option_discovery_steps,
+            generate_options=True, eval_fitness=False, log_postfix=f'generate_options_nr_{intrinsic_reward_function.reward_coords}')
 
-    # generate options in that
-    nr_fitness_calls += 1
-    options, _, _, _ = learners.approx_q_learning.learn(
-        environment=mdp, surrogate_reward=intrinsic_reward_function, training_steps=config.option_discovery_steps,
-        generate_options=True, eval_fitness=False, log_postfix=f'generate_options_nr_{nr_fitness_calls}')
+        env = config.environment()
+        intrinsic_reward_function.options = options
+        if not options:
+            intrinsic_reward_function.fitness = -shared.utils.eval_options(env, options)
+        else:
+            intrinsic_reward_function.fitness = shared.utils.eval_options(env, options)
 
-    if not options:
-        fitness = -1
-
-    env = config.environment()
-    fitness = shared.utils.eval_options(env, options)
-    return fitness, options
+    print(intrinsic_reward_function.fitness, intrinsic_reward_function.options)
+    return intrinsic_reward_function.fitness, intrinsic_reward_function.options

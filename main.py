@@ -1,6 +1,10 @@
 import multiprocessing
+import os
+import sys
+import time
 
 import numpy as np
+import tensorboardX
 import tqdm
 
 import config
@@ -15,6 +19,8 @@ from fitness import fitness_function
 class Reward:
     def __init__(self, reward_vector):
         self.reward_vector = reward_vector
+        self.fitness = None
+        self.options = None
 
     def __call__(self, observation, environment):
         image = observation.reshape(-1)
@@ -30,14 +36,6 @@ class Reward:
         pass
 
     def motivating_function(self, state):
-        class MotivatingFunction(Reward):
-            def __repr__(self):
-                representation = self.reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size)
-                # for layer in range(representation.shape[0]):
-                #     representation[layer]
-                # return repr()
-                return repr(representation)
-
         motivating_function = np.multiply(self.reward_vector, state.reshape(-1))
         negative_rewards = self.reward_vector[self.reward_vector < 0]
         # keep the punishments
@@ -46,11 +44,20 @@ class Reward:
         return MotivatingFunction(motivating_function)
 
 
+class MotivatingFunction(Reward):
+    def __repr__(self):
+        representation = self.reward_vector.reshape(-1, config.agent_view_size, config.agent_view_size)
+        # for layer in range(representation.shape[0]):
+        #     representation[layer]
+        # return repr()
+        return repr(representation)
+
+
 class ConstrainedReward(Reward):
-    def __init__(self, reward_parameters, normalize=True):
-        self.reward_parameters = reward_parameters
+    def __init__(self, reward_vector, normalize=True):
+        self.reward_parameters = reward_vector
         self.reward_coords = []
-        points = reward_parameters.reshape(-1, 3)
+        points = reward_vector.reshape(-1, 3)
         reward = np.ones(shape=(config.Minigrid.nr_layers, config.agent_view_size, config.agent_view_size)) * -0.005
         for layer, x, y in points:
             if normalize:
@@ -65,24 +72,27 @@ class ConstrainedReward(Reward):
                 layer *= config.Minigrid.nr_layers
                 layer += config.Minigrid.nr_layers / 2
                 layer = np.clip(layer, 0, config.Minigrid.nr_layers - 1)
-            reward[int(layer), int(x), int(y)] = 1
+            reward[int(layer), int(x), int(y)] = 2
             self.reward_coords.extend([int(layer), int(x), int(y)])
-
-        self.reward_vector = reward.reshape(-1)
+        super().__init__(reward.reshape(-1))
 
     def mutate(self):
-        return self.reward_parameters + np.random.randn(*self.reward_parameters.shape) / 10
+        # return self.reward_parameters + np.random.randn(*self.reward_parameters.shape) / 10
+        new_params = np.array(self.reward_coords)
+        new_params[np.random.randint(0, len(self.reward_coords))] += np.random.choice((-1, 1))
+        return new_params
 
 
-def maybe_multiprocess(population):
-    if config.DEBUG:
-        with multiprocessing.Pool() as pool:
-            retr = pool.map(fitness_function, population)
+pool = multiprocessing.Pool()
+
+
+def maybe_multiprocess(function, population):
+    if config.DEBUG or config.visualize_any:
+        retr = [function(p) for p in population]
     else:
-        retr = [fitness_function(p) for p in population]
-
-    population_fitness, options = zip(*retr)
-    return population_fitness
+        global pool
+        retr = pool.map(function, population)
+    return retr
 
 
 class Search:
@@ -106,7 +116,7 @@ class Search:
             population_fitness = self.calculate_fitness(population)
 
             best_sample, best_fitness = max(zip(population, population_fitness), key=lambda x: x[1])
-            self.mutate(best_sample, population)
+            population = self.mutate(best_sample, population)
 
             config.tensorboard.add_scalar('optimization/mean', np.array(population_fitness).mean(), optimization_iteration)
             config.tensorboard.add_scalar('optimization/best', best_fitness, optimization_iteration)
@@ -114,9 +124,8 @@ class Search:
         return None, None
 
     def calculate_fitness(self, population):
-        population_fitness = maybe_multiprocess(population)
+        population_fitness, options = zip(*maybe_multiprocess(fitness_function, population))
 
-        # population_fitness, options = zip(*[fitness_function(p) for p in population])
         print("")
         print("==RESULTS==")
         for r, fit in zip(population, population_fitness):
@@ -125,11 +134,13 @@ class Search:
 
     def mutate(self, best_sample, population):
         for idx, p in enumerate(population):
-            if p == best_sample:
+            if p is best_sample:
                 continue
             new_parameters = best_sample.mutate()
-            population[idx] = ConstrainedReward(new_parameters)
-            print('newly generated reward params', population[idx].reward_parameters)
+            population[idx] = ConstrainedReward(new_parameters, normalize=False)
+            print(f'mutate {best_sample.reward_parameters} ({best_sample.reward_coords})',
+                  f'to     {population[idx].reward_parameters} ({population[idx].reward_coords})', sep='\n')
+        return population
 
     def generate_initial_population(self):
         population = [ConstrainedReward(np.random.randn(self.reward_space_size)) for _ in range(config.population)]
@@ -236,6 +247,40 @@ class Search:
 
 
 def main():
+    experiment_name = "DEBUG:" + time.strftime("%Y_%m_%d-%H_%M_%S")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    try:
+        import tkinter.simpledialog
+    except ImportError:
+        HASGUI = False
+    else:
+        HASGUI = True
+    response = None
+    if not config.DEBUG and HASGUI:
+        try:
+            # comment = "256h32bs"
+            root = tkinter.Tk()
+            response = tkinter.simpledialog.askstring("comment", "comment")
+            root.destroy()
+        except tkinter.TclError as _:
+            pass
+        else:
+            if response is None:
+                response = "DELETEME"
+                # DEBUG = True
+
+    config.experiment_name = f'{response}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
+    if len(sys.argv) > 1:
+        config.experiment_name = f'{sys.argv[1]}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
+
+    print('EXPERIMENT:', experiment_name)
+    # class fake_writer:
+    #     def add_scalar(*args):
+    #         pass
+    # tensorboard = fake_writer()
+    config.tensorboard = tensorboardX.SummaryWriter(os.path.join('runs', experiment_name), flush_secs=1)
+
+    # multiprocessing.set_start_method('spawn')
     regressor = Search()
     regressor.optimize()
 

@@ -1,11 +1,11 @@
 import gym
-import shared.constants as C
 import gym.spaces
 # noinspection PyUnresolvedReferences
 import gym_minigrid
 import numpy as np
 
 import config
+import shared.constants as C
 
 
 class MiniGrid(gym.Env):
@@ -49,6 +49,13 @@ class MiniGrid(gym.Env):
 
         assert info_map.max() == 1 and info_map.min() == 0
         assert info_map[C.FOOD_LAYER, :, :].sum() <= 1
+
+        if config.blurred_observations:
+            for layer in range(info_map.shape[0]):
+                info_map[layer, 0:2, 0:2] = info_map[layer, 0:2, 0:2].max()
+                info_map[layer, 0:2, 3:5] = info_map[layer, 0:2, 3:5].max()
+                info_map[layer, 3:5, 0:2] = info_map[layer, 3:5, 0:2].max()
+                info_map[layer, 3:5, 3:5] = info_map[layer, 3:5, 3:5].max()
 
         info_map.flags.writeable = False
         return info_map
@@ -97,4 +104,3 @@ class MiniGrid(gym.Env):
 
     def __str__(self):
         return self.__repr__()
-

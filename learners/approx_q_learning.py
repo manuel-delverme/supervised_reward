@@ -16,6 +16,17 @@ import shared.utils
 from learners.helpers import CachedPolicy
 
 
+def softmax(x):
+    """Compute softmax values for each sets of scores in x."""
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum(axis=0)
+
+
+class FakeWriter():
+    def add_scalar(self, *args, **kwargs):
+        pass
+
+
 class LinearRegressionModel(nn.Module):
     def __init__(self, nr_inputs):
         super(LinearRegressionModel, self).__init__()
@@ -153,7 +164,6 @@ def pick_action_test(state, old_action_idx, old_primitive_action, is_option, env
 def pick_action(observation, old_action_idx, old_primitive_action, is_option, environment, *, exploit=False, epsilon=None, available_actions=None, estimator=None,
                 time_steps_under_option=0):
     was_option = is_option(old_action_idx)
-    # logger.add_scalar('learning/was_option', was_option)
 
     if was_option and old_primitive_action != shared.constants.TERMINATE_OPTION and time_steps_under_option < config.max_option_duration:
         # keep following the option
@@ -166,6 +176,8 @@ def pick_action(observation, old_action_idx, old_primitive_action, is_option, en
             q_values = estimator.predict(observation)
             q_values = q_values[:len(available_actions)]
             action_idx = int(np.argmax(q_values))
+            # action_idx = np.random.choice(range(q_values.shape[0]), p=softmax(q_values[:, 0]))
+
             # best_action, second_best = np.argsort(q_values)[:2]
             # action_idx = int(best_action)
 
@@ -220,7 +232,10 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
             type_of_run = 'option'
             position = 1
 
-    logger = tensorboardX.SummaryWriter(os.path.join('runs', config.experiment_name, log_postfix), flush_secs=1)
+    if config.DEBUG:
+        logger = tensorboardX.SummaryWriter(os.path.join('runs', config.experiment_name, log_postfix), flush_secs=1)
+    else:
+        logger = FakeWriter()  # experiment name is not set anyway
 
     nr_primitive_actions = environment.action_space.n
     available_actions = list(range(nr_primitive_actions))

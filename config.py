@@ -1,16 +1,6 @@
 import sys
-import time
 import warnings
 
-try:
-    import tkinter.simpledialog
-except ImportError:
-    HASGUI = False
-else:
-    HASGUI = True
-
-import os
-import tensorboardX
 import torch
 
 seed = 31337  # this is used in  gym-minigrid/gym_minigrid/minigrid.py
@@ -33,30 +23,8 @@ warnings.warn('check if walkable/nonwalkable is needded')
 DEBUG = '_pydev_bundle.pydev_log' in sys.modules.keys()
 print("DEBUG: ", DEBUG)
 
-experiment_name = "DEBUG:" + time.strftime("%Y_%m_%d-%H_%M_%S")
-# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 device = torch.device("cpu")  # GPU is slower for small networks
-
 print(f"USING {device}")
-
-response = None
-if not DEBUG and HASGUI:
-    try:
-        # comment = "256h32bs"
-        root = tkinter.Tk()
-        response = tkinter.simpledialog.askstring("comment", "comment")
-        root.destroy()
-    except tkinter.TclError as _:
-        pass
-    else:
-        if response is None:
-            response = "DELETEME"
-            # DEBUG = True
-
-experiment_name = f'{response}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
-if len(sys.argv) > 1:
-    experiment_name = f'{sys.argv[1]}:{time.strftime("%Y_%m_%d-%H_%M_%S")}{os.getpid()}'
 
 repeat_eval_options = 1 if DEBUG else 1
 
@@ -65,8 +33,8 @@ eval_test_restarts = 1  # 0
 
 option_discovery_steps = 10002
 option_eval_test_steps = 5003
-option_eval_training_steps = 20002
-option_train_steps = 100005
+option_eval_training_steps = 2002
+option_train_steps = 2005
 
 evolution_iters = 150004
 max_env_steps = 200
@@ -80,14 +48,14 @@ if 'S1' in env_name:
     option_eval_training_steps //= 5
     max_env_steps /= 5  # None
 
-if DEBUG:
-    print("DECIMATING TIMES BECAUSE DEBUG")
-    eval_test_restarts = 1
-    option_train_steps //= 10
-    option_discovery_steps //= 100
-    option_eval_training_steps //= 10
-    option_eval_test_steps //= 10
-    evolution_iters = 10
+# if DEBUG:
+#     print("DECIMATING TIMES BECAUSE DEBUG")
+#     eval_test_restarts = 1
+#     option_train_steps //= 10
+#     option_discovery_steps //= 100
+#     option_eval_training_steps //= 10
+#     option_eval_test_steps //= 10
+#     evolution_iters = 10
 
 # main.env_name = "debug"
 # env_name = "boxes"
@@ -103,23 +71,21 @@ compact_observation = False
 visualize_all = 0
 enjoy_surrogate_reward = visualize_all or 0
 
-enjoy_master_learning = visualize_all or 0
-enjoy_option_learning = visualize_all or 0
+enjoy_master_learning = visualize_all or 1
+enjoy_option_learning = visualize_all or 1
 
-enjoy_learned_options = visualize_all or 0
-enjoy_option = visualize_all or 0
-enjoy_test = visualize_all or 0
+enjoy_learned_options = visualize_all or 1
+enjoy_option = visualize_all or 1
+enjoy_test = visualize_all or 1
+
+visualize_any = any((enjoy_surrogate_reward, enjoy_master_learning,
+                     enjoy_option_learning, enjoy_learned_options,
+                     enjoy_option, enjoy_test,))
 
 disable_tqdm = True
 
 population = 2
 
-print('EXPERIMENT:', experiment_name)
-# class fake_writer:
-#     def add_scalar(*args):
-#         pass
-# tensorboard = fake_writer()
-tensorboard = tensorboardX.SummaryWriter(os.path.join('runs', experiment_name), flush_secs=1)
 
 
 class Minigrid:
@@ -129,10 +95,10 @@ class Minigrid:
 
 
 learn_epsilon = 0.1
-max_nr_options = 2
+max_nr_options = 1
 option_trigger_treshold = 1.0
 option_termination_treshold = option_trigger_treshold
-max_option_duration = 5
+max_option_duration = 10
 BATCH_SIZE = 64
 
 print({
@@ -144,3 +110,6 @@ print({
 })
 
 no_variance = True
+trivial_observations = False  # not implemented
+blurred_observations = True
+recalculate_fitness = True

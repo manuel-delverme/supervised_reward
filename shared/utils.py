@@ -138,7 +138,6 @@ def plot_surrogate_reward(environment, surrogate_reward):
         print('enjoying reward', surrogate_reward, sep='\n')
 
     replace_reward = True
-    terminate_on_surr_reward = False
 
     environment.reset()
     rewards = {idx: np.zeros(shape=(environment.env.height, environment.env.width)) for idx in range(4)}
