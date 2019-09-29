@@ -741,9 +741,6 @@ class MiniGridEnv(gym.Env):
         # To keep the same grid for each episode, call env.seed() with
         # the same seed before calling env.reset()
         self._gen_grid(self.width, self.height)
-        self.doors = []
-        for room in self.rooms:
-            self.doors.append(room.entryDoorPos)
 
         # These fields should be defined by _gen_grid
         assert self.start_pos is not None
@@ -1127,6 +1124,15 @@ class MiniGridEnv(gym.Env):
 
         # Get the contents of the cell in front of the agent
         fwd_cell = self.grid.get(*fwd_pos)
+
+        if config.automatic_pickup:
+            if fwd_cell and fwd_cell.can_pickup():
+                assert self.carrying is None
+                self.carrying = fwd_cell
+                self.carrying.cur_pos = np.array([-1, -1])
+                self.grid.set(*fwd_pos, None)
+                fwd_cell = self.grid.get(*fwd_pos)
+
 
         # Rotate left
         if action == self.actions.left:

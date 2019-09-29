@@ -7,10 +7,10 @@ from matplotlib import pyplot as plt
 
 import config
 import learners.approx_q_learning
-from learners.approx_q_learning import update_reward
 
 
 def eval_options(env, options):
+    print('eval options', options)
     cum_score = 0
     for eval_step in range(config.repeat_eval_options):
         _, _, fitness, _ = learners.approx_q_learning.learn(
@@ -94,21 +94,19 @@ def enjoy_policy(environment, policy, reward_function=False):
             if reward == config.option_termination_treshold:
                 print('forcing terminal')
                 terminal = True
-                policy.reward_function.reset()
+                policy.motivating_function.reset()
 
         environment.render(observation=obs)
-        inspect = False
-        cmd = input('q_to_exit, t to terminate, i for inspect else step')
+        cmd = input('q_to_exit, t to terminate')
         if cmd == 'q':
             break
         if cmd == 't' or terminal:
             obs = environment.reset()
-            policy.reward_function.reset()
-        if cmd == 'i':
-            inspect = True
+            policy.motivating_function.reset()
 
 
 def enjoy_surrogate_reward(environment, surrogate_reward):
+    from learners.approx_q_learning import update_reward
     obs = environment.reset()
     environment.render(observation=obs)
     environment.render(observation=obs)
@@ -126,14 +124,21 @@ def enjoy_surrogate_reward(environment, surrogate_reward):
 
         new_state, env_reward, terminal, info = environment.step(action)
         reward, terminal = update_reward(environment, new_state, replace_reward=True, reward=env_reward, steps_since_last_restart=-1, terminal=terminal,
-                                         surrogate_reward=surrogate_reward, type_of_run='visualization')
+                                         surrogate_reward=surrogate_reward, type_of_run='visualization', inibited_rewards=())
 
         with np.printoptions(precision=3, suppress=True):
             print('updated reward from env', reward, 'real reward', env_reward, 'terminal', terminal)
         environment.render(observation=new_state)
+        if terminal:
+            environment.reset()
+            surrogate_reward.reset()
+
+        if surrogate_reward.ltl_progress == len(surrogate_reward.target_state):
+            surrogate_reward.reset()
 
 
 def plot_surrogate_reward(environment, surrogate_reward):
+    from learners.approx_q_learning import update_reward
     with np.printoptions(precision=3, suppress=True):
         print('enjoying reward', surrogate_reward, sep='\n')
 

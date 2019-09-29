@@ -5,10 +5,10 @@ import shared.utils
 
 
 class CachedPolicy:
-    def __init__(self, estimator, reward_function):
+    def __init__(self, estimator, motivating_function):
         self.estimator = estimator
         self.cache = {}
-        self.reward_function = reward_function
+        self.motivating_function = motivating_function
 
     def __setitem__(self, obs_hash, value):
         obs_hash = shared.utils.hash_image(obs_hash)
@@ -26,8 +26,10 @@ class CachedPolicy:
         return q_values
 
     def get_or_terminate(self, image, environment):
-        if self.reward_function(image, environment) >= config.option_termination_treshold:
-            self.reward_function.reset()
+        reward = self.motivating_function(image, environment)
+        # print(reward, self.motivating_function.ltl_progress)
+        if reward >= config.option_termination_treshold:
+            self.motivating_function.reset()
             return -1
         return self._get(image)
 
@@ -45,20 +47,11 @@ class CachedPolicy:
         assert action_idx == int(np.argmax(self.estimator.predict(image)))
         return action_idx
 
-    def __getitem__(self, image):
-        raise DeprecationWarning
-        obs_hash = shared.utils.hash_image(image)
-        if obs_hash not in self.cache:
-            q_values = self.estimator.predict(image)
-            action_idx = int(np.argmax(q_values))
-            self.cache[obs_hash] = action_idx
-        return self.cache[obs_hash]
+    def __str__(self):
+        return str(self.motivating_function)
 
-    # def __str__(self):
-    #     return self.reward_vector.__str__()
-
-    # def __repr__(self):
-    #     return self.reward_vector.__str__()
+    def __repr__(self):
+        return str(self)
 
 
 def is_terminate_option(skill, old_state):

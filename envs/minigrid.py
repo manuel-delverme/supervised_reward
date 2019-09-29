@@ -79,7 +79,7 @@ class MiniGrid(gym.Env):
     def step(self, action):
         assert 0 <= action <= 4
         if action == 3:
-            action = 5
+            action = self.env.actions.toggle
         obs, reward, done, info = self.env.step(action)
 
         reward = reward - 0.1

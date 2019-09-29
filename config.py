@@ -3,7 +3,10 @@ import warnings
 
 import torch
 
-seed = 31337  # this is used in  gym-minigrid/gym_minigrid/minigrid.py
+# this is used in  gym-minigrid/gym_minigrid/minigrid.py
+# seed = 31337 too easy
+seed = 1337
+
 agent_view_size = 5  # 7
 import envs.minigrid
 
@@ -33,8 +36,9 @@ eval_test_restarts = 1  # 0
 
 option_discovery_steps = 10002
 option_eval_test_steps = 5003
-option_eval_training_steps = 2002
-option_train_steps = 2005
+
+option_eval_training_steps = 20002
+option_train_steps = 50005 // 10
 
 evolution_iters = 150004
 max_env_steps = 200
@@ -70,22 +74,23 @@ compact_observation = False
 
 visualize_all = 0
 enjoy_surrogate_reward = visualize_all or 0
+enjoy_motivating_function = visualize_all or 0
 
 enjoy_master_learning = visualize_all or 1
 enjoy_option_learning = visualize_all or 1
 
-enjoy_learned_options = visualize_all or 1
-enjoy_option = visualize_all or 1
+enjoy_learned_options = visualize_all or 0
+# enjoy_option = visualize_all or 0
 enjoy_test = visualize_all or 1
 
 visualize_any = any((enjoy_surrogate_reward, enjoy_master_learning,
                      enjoy_option_learning, enjoy_learned_options,
-                     enjoy_option, enjoy_test,))
+                     # enjoy_option,
+                     enjoy_test,))
 
-disable_tqdm = True
+disable_tqdm = False
 
-population = 2
-
+population = 20
 
 
 class Minigrid:
@@ -113,3 +118,5 @@ no_variance = True
 trivial_observations = False  # not implemented
 blurred_observations = True
 recalculate_fitness = True
+automatic_pickup = True
+exploration_bonus = False

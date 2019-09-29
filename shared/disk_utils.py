@@ -14,8 +14,11 @@ import config
 def disk_cache(function):
     def wrapper(*args, **kwargs):
         fid = function.__name__
-        # if fid == "eval_option_on_mdp":
-        #    args = tuple((args[0], args[1], args[2], list(args[3]), list(args[4])))
+
+
+        if fid == "learn_option":
+           del kwargs['option_nr']
+
         cache_file = "cache/{}".format(fid)
         if args:
             args_filtered = []
@@ -65,10 +68,10 @@ def disk_cache(function):
                 storage_fn = open
             else:
                 storage_fn = gzip.open
-            if config.DEBUG:
-                print("NOT CACHING {} BECAUSE DEBUG".format(fid))
-            else:
-                with storage_fn(cache_file, "wb") as fout:
-                    pickle.dump(retr, fout)
+            # if config.DEBUG:
+            #     print("NOT CACHING {} BECAUSE DEBUG".format(fid))
+            # else:
+            with storage_fn(cache_file, "wb") as fout:
+                pickle.dump(retr, fout)
         return retr
     return wrapper

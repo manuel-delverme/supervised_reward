@@ -1,5 +1,6 @@
 import collections
 import copy
+import math
 import os
 import random
 import time
@@ -14,6 +15,7 @@ import config
 import shared.constants
 import shared.utils
 from learners.helpers import CachedPolicy
+from shared import disk_utils
 
 
 def softmax(x):
@@ -231,6 +233,7 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
         else:
             type_of_run = 'option'
             position = 1
+    print('type', type_of_run)
 
     if config.DEBUG:
         logger = tensorboardX.SummaryWriter(os.path.join('runs', config.experiment_name, log_postfix), flush_secs=1)
@@ -268,25 +271,24 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
     cum_loss = 0
     time_steps_under_option = 0
     discounted_reward_under_option = 0
+    highest_reward = None
 
     option_begin_state = None
     action_idx = None
     primitive_action = None
     learned_options = set()
 
-    if surrogate_reward is not None and config.enjoy_surrogate_reward:  # or (config.enjoy_option and not generate_options)):
-        environment.reset()
+    if (config.enjoy_surrogate_reward and type_of_run == "discovery") or (config.enjoy_motivating_function and type_of_run == "option"):
+        # environment.reset()
         # print('plotting', type_of_run)
-        shared.utils.plot_surrogate_reward(environment, surrogate_reward)
-        environment.reset()
+        # shared.utils.plot_surrogate_reward(environment, surrogate_reward)
 
+        environment.reset()
         # print('enjoying', type_of_run)
         shared.utils.enjoy_surrogate_reward(environment, surrogate_reward)
 
     desc = f"Training {type_of_run}, option nr {option_nr}"
-    steps_since_last_restart = 0
-
-    old_state = environment.reset()
+    old_state, steps_since_last_restart = reset(available_actions, environment, nr_primitive_actions, surrogate_reward)
     new_state = old_state
 
     for step in tqdm.tqdm(range(training_steps), desc=desc, disable=config.disable_tqdm, position=position):
@@ -307,7 +309,16 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
             new_state, reward, terminal, info = environment.step(available_actions[primitive_action])
 
             cumulative_real_reward = update_non_surrogate_metrics(cumulative_real_reward, fitness, logger, option_nr, reward, step)
-            reward, terminal = update_reward(environment, new_state, replace_reward, reward, steps_since_last_restart, surrogate_reward, terminal, type_of_run)
+            reward, terminal = update_reward(environment, new_state, replace_reward, reward, steps_since_last_restart, surrogate_reward, terminal, type_of_run,
+                                             available_actions[nr_primitive_actions:])
+
+            reward_improvement = 0
+            if highest_reward is None:
+                highest_reward = reward
+
+            if reward > highest_reward:
+                reward_improvement = reward - highest_reward
+                highest_reward = reward
 
             logger.add_scalar(f'learning{option_nr}/surrogate_reward', reward, step)
             logger.add_scalar(f'learning{option_nr}/option_completed', reward > 0.2, step)
@@ -316,8 +327,8 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
 
             maybe_render_train(action_idx, action_value, available_actions, environment, reward, step, terminal, training_steps, type_of_run, new_state)
 
-            opt, available_actions, estimator = generate_new_option(
-                estimator, available_actions, environment, generate_options, learned_options, new_state, reward, surrogate_reward)
+            opt, available_actions, estimator, highest_reward = generate_new_option(estimator, available_actions, generate_options, learned_options, new_state, reward_improvement,
+                                                                                    surrogate_reward, highest_reward)
 
             if len(available_actions[nr_primitive_actions:]) >= config.max_nr_options and not eval_fitness:
                 return available_actions[nr_primitive_actions:], cumulative_reward, None, estimator
@@ -347,10 +358,7 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
                     primitive_action = shared.constants.TERMINATE_OPTION
 
             if terminal:
-                environment.reset()
-                if surrogate_reward is not None:
-                    surrogate_reward.reset()
-                steps_since_last_restart = 0
+                new_state, steps_since_last_restart = reset(available_actions, environment, nr_primitive_actions, surrogate_reward)
 
         old_state = new_state
 
@@ -360,7 +368,8 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
             test_fitness = test(
                 environment=environment, estimator=estimator, eval_steps=config.option_eval_test_steps, render=False, is_option=is_option,
                 available_actions=available_actions[:nr_usable_actions],
-                update_reward=lambda s, r, t: update_reward(environment, s, replace_reward, r, steps_since_last_restart, surrogate_reward, t, type_of_run)
+                update_reward=lambda s, r, t: update_reward(environment, s, replace_reward, r, steps_since_last_restart, surrogate_reward, t, type_of_run,
+                                                            available_actions[nr_primitive_actions:])
             )
             # print('tested')
     else:
@@ -370,19 +379,47 @@ def learn(environment, *, options=False, epsilon=config.learn_epsilon, gamma=0.9
     return opts, cumulative_reward, test_fitness, estimator
 
 
-def update_reward(environment, new_state, replace_reward, reward, steps_since_last_restart, surrogate_reward, terminal, type_of_run):
+def reset(available_actions, environment, nr_primitive_actions, surrogate_reward):
+    observation = environment.reset()
+    if surrogate_reward is not None:
+        surrogate_reward.reset()
+    for available_action in available_actions[nr_primitive_actions:]:
+        available_action.motivating_function.reset()
+    return observation, 0
+
+
+seen_states = {}
+
+
+def update_reward(environment, new_state, replace_reward, reward, steps_since_last_restart, surrogate_reward, terminal, type_of_run, inibited_rewards):
     assert replace_reward
     if surrogate_reward is not None:
         reward = surrogate_reward(new_state, environment)
-        terminal = reward >= config.option_termination_treshold
-    if type_of_run == 'option' and steps_since_last_restart > config.max_train_option_steps:
+        for option in inibited_rewards:
+            inibition = option.motivating_function(new_state, environment)
+            reward -= inibition
+
+    if type_of_run == 'option' and (steps_since_last_restart > config.max_train_option_steps or reward >= config.option_termination_treshold):
         terminal = True
     elif steps_since_last_restart > config.max_env_steps:
         terminal = True
+
+    if config.exploration_bonus:
+        tup = (tuple(environment.env.agent_pos))
+        pre_count = 0
+        if tup in seen_states:
+            pre_count = seen_states[tup]
+
+        # Update the count for this key
+        new_count = pre_count + 1
+        seen_states[tup] = new_count
+        bonus = 1 / math.sqrt(new_count)
+        reward += bonus
+
     return reward, terminal
 
 
-def generate_new_option(estimator, available_actions, environment, generate_options, learned_options, state, reward, surrogate_reward):
+def generate_new_option(estimator, available_actions, generate_options, learned_options, state, reward, surrogate_reward, highest_reward):
     new_option = False
 
     if generate_options and reward >= config.option_trigger_treshold:
@@ -390,15 +427,17 @@ def generate_new_option(estimator, available_actions, environment, generate_opti
         option_hash = hash_option(motivating_function)
 
         if option_hash not in learned_options:
+            print("discovered new option", motivating_function, 'of', surrogate_reward)
             # with np.printoptions(precision=3, suppress=True):
             #     # with np.set_printoptions(precision=3):
             #     print('generating sub option', motivating_function)
-            new_option = learn_option(motivating_function, environment, option_nr=len(learned_options))
+            new_option = learn_option(motivating_function, option_nr=len(learned_options))
 
             learned_options.add(option_hash)
             available_actions.append(copy.deepcopy(new_option))
             estimator.add_new_action()
-    return new_option, available_actions, estimator
+        highest_reward = 0
+    return new_option, available_actions, estimator, highest_reward
 
 
 def maybe_render_train(action_idx, action_value, available_actions, environment, reward, step, terminal, training_steps, type_of_run, new_state):
@@ -407,10 +446,12 @@ def maybe_render_train(action_idx, action_value, available_actions, environment,
     ) or (
             type_of_run == 'option' and config.enjoy_option_learning and step > (training_steps - 50)
     ):
-        action_names = ('<', '>', 'foward', 'toggle', *range(len(available_actions) - 4))
-        action_value_ = []
-        for z in zip(action_names, (str(float(a))[:5] for a in action_value)):
-            action_value_.append(str(z))
+        # action_names = ('<', '>', 'foward', 'toggle', *range(len(available_actions) - 4))
+        # action_value_ = []
+        # for z in zip(action_names, (str(float(a))[:5] for a in action_value)):
+        #     action_value_.append(str(z))
+        action_names = ('value',)
+        action_value_ = (str(max(action_value)),)
 
         environment.render(type_of_run=type_of_run, reward=reward, step=step, action_idx=action_idx, action_value=action_value_, observation=new_state)
         time.sleep(0.2)
@@ -529,14 +570,15 @@ def test(environment, eval_steps, *, estimator=None, render=False, is_option=Non
     return fitness
 
 
-def learn_option(option_reward, mdp, *, training_steps=config.option_train_steps, option_nr=-1):  # reduced for 7x7
+@disk_utils.disk_cache
+def learn_option(option_reward, *, option_nr=-1):  # reduced for 7x7
     _, _, _, estimator = learn(
-        environment=mdp, options=False, surrogate_reward=option_reward, training_steps=training_steps, eval_fitness=False,
+        environment=config.environment(), options=False, surrogate_reward=option_reward, training_steps=config.option_train_steps, eval_fitness=False,
         replace_reward=True, option_nr=option_nr, log_postfix=f'learn_option{option_nr}')
-
-    option = CachedPolicy(copy.deepcopy(estimator), reward_function=option_reward)
-
+    option_reward.reset()
+    option = CachedPolicy(copy.deepcopy(estimator), motivating_function=option_reward)
     if config.enjoy_learned_options:
+        mdp = config.environment()
         with np.printoptions(precision=3, suppress=True):
             print(f'learned option[{option_nr}] for GOAL:', option_reward)
 
