@@ -10,7 +10,7 @@ def fitness_function(intrinsic_reward_function):
         # generate options in that
         options, _, _, _ = learners.approx_q_learning.learn(
             environment=mdp, surrogate_reward=intrinsic_reward_function, training_steps=config.option_discovery_steps,
-            generate_options=True, eval_fitness=False, log_postfix=f'generate_options_nr_{intrinsic_reward_function.reward_coords}')
+            generate_options=True, eval_fitness=False, log_postfix=f'fitness_of_{intrinsic_reward_function.reward_coords}')
 
         env = config.environment()
         intrinsic_reward_function.options = options

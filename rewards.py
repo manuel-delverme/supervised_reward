@@ -97,37 +97,32 @@ class LTLReward:
         return len(self.target_state) == self.ltl_progress
 
     def __repr__(self):
-        return f"reach {' >> '.join(str([(k, els[k]) for k in sorted(els.keys())]) for els in self.target_state)}"
+        seq = []
+        for els in self.target_state:
+            step = []
+            for k in sorted(els.keys()):
+                if els[k]:
+                    step.append(k.upper())
+                else:
+                    step.append(k)
+            step = str(step)
+            seq.append(step)
+        _repr = ' >> '.join(seq)
+        return f"reach {_repr}"
 
     def __call__(self, new_state, environment):
-        # if len(self.target_state) == self.ltl_progress:
-        #     return 0.0  # the function is done, no influence
-
         self._update_state(environment)
-        # TODO: handle going back in the formula
-        if not self.complete():
-            active_formula = self.target_state[self.ltl_progress]
-            new_ltl_clauses = {k for k, v in active_formula.items() if self.state[k]}
-            if not set(active_formula.keys()).difference(new_ltl_clauses):  # TODO: assuming only Trues
-                # we are done with this LTL formula, move to the next
-                self.ltl_progress += 1
-                #     reward = config.option_termination_treshold
-                # print(f"Completed LTL step {self.ltl_progress}")
-            # elif len(new_ltl_clauses) > len(self.achieved_ltl_clauses):
-            #     # Added an extra clause # TODO assuming you can't unset
-            #     if self.reward_partials:
-            #         print(f"\nwent from {self.achieved_ltl_clauses} \t\t {new_ltl_clauses}")
-            #         reward = config.option_trigger_treshold
-            #     else:
-            #         print("Extra LTL clause, inside option")
-            #         reward = 0.1
-            self.achieved_ltl_clauses = new_ltl_clauses
 
         if self.reward_partials:
             reward = len(self.achieved_ltl_clauses) * config.option_trigger_treshold
+            if not reward:
+                reward = -0.01
         else:
-            # TODO: multi step state
-            reward = len(self.achieved_ltl_clauses) / len(self.target_state[0]) * config.option_trigger_treshold
+            # TODO: multi step state, here i pick 0th element which is wrong
+            if len(self.achieved_ltl_clauses) == len(self.target_state[0]):
+                reward = config.option_termination_treshold
+            else:
+                reward = -0.01
         return float(reward)
 
     def _update_state(self, environment):
@@ -150,9 +145,19 @@ class LTLReward:
             else:
                 raise Exception(cell)
         front_cell = environment.env.grid.get(*environment.env.front_pos)
-        self.state['front_door'] = False
-        if front_cell is not None:
-            self.state['front_door'] = front_cell.type == "door"
+        self.state['front_door'] = front_cell is not None and front_cell.type == "door"
+
+        active_formula = self.target_state[self.ltl_progress]
+
+        if len(self.target_state) > 1:
+            raise NotImplementedError
+
+        new_ltl_clauses = {k for k, v in active_formula.items() if self.state[k] == self.target_state[0][k]}
+        if not set(active_formula.keys()).difference(new_ltl_clauses):  # TODO: assuming only Trues
+            if len(self.target_state) > 1:
+                raise NotImplementedError
+            # self.ltl_progress += 1 TODO: disabled for now
+        self.achieved_ltl_clauses = new_ltl_clauses
 
     def reset(self):
         self.ltl_progress = 0
@@ -161,4 +166,9 @@ class LTLReward:
 
     def motivating_function(self, _):
         # TODO: the values should be {True, False, Don't Care}, right now False means Don't Care
-        return LTLReward([{k: True for k in self.achieved_ltl_clauses}, ], reward_partials=False)
+        if len(self.target_state) > 1:
+            raise NotImplementedError
+        target_state = {k: False for k in self.target_state[0]}
+        target_state.update({k: True for k in self.achieved_ltl_clauses})
+
+        return LTLReward([target_state, ], reward_partials=False)

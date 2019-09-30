@@ -1,11 +1,11 @@
 import random
-import learners.approx_q_learning
 import time
 
 import numpy as np
 from matplotlib import pyplot as plt
 
 import config
+import learners.approx_q_learning
 import learners.approx_q_learning
 
 
@@ -42,7 +42,8 @@ def plot_intinsic_motivation(motivating_function, old_state, step):
         config.tensorboard.add_figure(f'motivating_functions/{layer}', figure, global_step=step, close=True)
 
 
-def enjoy_policy(environment, policy, reward_function=False):
+def enjoy_policy(environment, policy, available_actions, reward_function=False):
+    forced_action = None
     environment.render()
     environment.render()
     obs = environment.reset()
@@ -50,43 +51,31 @@ def enjoy_policy(environment, policy, reward_function=False):
         policy.reward_function.reset()
     except AttributeError:
         pass
-    inspect = False
 
     while True:
-        # print(obs.reshape(-1, config.agent_view_size, config.agent_view_size))
-        dt = []
-        for idx, (m, n, v) in enumerate(zip(policy.estimator.models, ('<', '>', 'foward', 'toggle'), policy.get_value(obs))):
-            if inspect:
-                w = m.regressor.weight.reshape(-1).detach().numpy()
-                w = np.multiply(w, obs.reshape(-1))
-                w = w.reshape(obs.shape)  # .transpose(1, 2, 0)
+        for idx, (m, n, v) in enumerate(zip(policy.estimator.models, ('<', '>', 'foward', 'toggle', *range(10)), policy.get_value(obs))):
+            print(n, v)
 
-                plt.suptitle(f'weights for action {n}')
-                for layer in range(w.shape[0]):
-                    plt.subplot(2, 2, layer + 1)
-                    plt.imshow(w[layer, :, :], vmin=w.min(), vmax=w.max())
-                    cbar = plt.colorbar()
-                plt.show()
-                b = m.regressor.bias.detach().numpy()
-            else:
-                b = None
+        active_policy = policy
+        while hasattr(active_policy, 'get_or_terminate'):
+            action_idx = active_policy.get_or_terminate(obs, environment)
+            active_policy = available_actions[action_idx]
 
-            dt.append((n, b, v))
-        plt.show()
+        if forced_action is not None:
+            action_idx = forced_action
+            forced_action = None
+        else:
+            action_idx = active_policy
 
-        print(*dt, sep='\n')
-
-        action = policy.get_or_terminate(obs, environment)
-
-        while action == -1:
+        while action_idx == -1:
             obs = environment.reset()
             policy.reward_function.reset()
 
             time.sleep(1)
-            action = policy.get_or_terminate(obs, environment)
-            print('a', action, 'r', policy.reward_function)
+            action_idx = policy.get_or_terminate(obs, environment)
+            print('a', action_idx, 'r', policy.reward_function)
 
-        obs, reward, terminal, info = environment.step(action)
+        obs, reward, terminal, info = environment.step(action_idx)
 
         if reward_function:
             reward = reward_function(obs, environment)
@@ -100,12 +89,17 @@ def enjoy_policy(environment, policy, reward_function=False):
         cmd = input('q_to_exit, t to terminate')
         if cmd == 'q':
             break
-        if cmd == 't' or terminal:
+        elif cmd == 't' or terminal:
             obs = environment.reset()
             policy.motivating_function.reset()
+        else:
+            try:
+                forced_action = ['a', 'd', 'w', 'e', '1', '2'].index(cmd)
+            except ValueError:
+                pass
 
 
-def enjoy_surrogate_reward(environment, surrogate_reward):
+def enjoy_surrogate_reward(environment, surrogate_reward, inibited_rewards=(), type_of_run="visualization"):
     from learners.approx_q_learning import update_reward
     obs = environment.reset()
     environment.render(observation=obs)
@@ -124,14 +118,14 @@ def enjoy_surrogate_reward(environment, surrogate_reward):
 
         new_state, env_reward, terminal, info = environment.step(action)
         reward, terminal = update_reward(environment, new_state, replace_reward=True, reward=env_reward, steps_since_last_restart=-1, terminal=terminal,
-                                         surrogate_reward=surrogate_reward, type_of_run='visualization', inibited_rewards=())
+                                         surrogate_reward=surrogate_reward, type_of_run=type_of_run, inibited_rewards=inibited_rewards)
 
         with np.printoptions(precision=3, suppress=True):
             print('updated reward from env', reward, 'real reward', env_reward, 'terminal', terminal)
         environment.render(observation=new_state)
         if terminal:
             environment.reset()
-            surrogate_reward.reset()
+        surrogate_reward.reset()
 
         if surrogate_reward.ltl_progress == len(surrogate_reward.target_state):
             surrogate_reward.reset()

@@ -77,7 +77,7 @@ class MiniGrid(gym.Env):
         return self._observation_space
 
     def step(self, action):
-        assert 0 <= action <= 4
+        assert 0 <= action < 4
         if action == 3:
             action = self.env.actions.toggle
         obs, reward, done, info = self.env.step(action)

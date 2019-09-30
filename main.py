@@ -1,5 +1,5 @@
 import abc
-import multiprocessing
+# import multiprocessing
 import os
 import random
 import sys
@@ -14,11 +14,11 @@ import fitness
 import shared.constants as C
 from rewards import Reward, ConstrainedReward
 
-pool = multiprocessing.Pool()
+# pool = multiprocessing.Pool()
 
 
 def maybe_multiprocess(function, population):
-    if config.DEBUG or config.visualize_any:
+    if config.DEBUG or config.visualize_any or not config.multiprocess:
         retr = [function(p) for p in population]
     else:
         global pool
@@ -39,6 +39,9 @@ class Search:
 
     def optimize(self):
         population = self.generate_initial_population()
+        _ = self.fitness_function(population[0])  # raise errors
+        raise NotImplementedError
+
         if config.DEBUG:
             _ = self.fitness_function(population[0])  # raise errors
             self.test_intuitive_cases(self.reward_space_size)

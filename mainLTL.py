@@ -1,4 +1,5 @@
 import random
+import datetime
 
 import config
 from main import Search
@@ -37,17 +38,18 @@ class LTLSearch(Search):
         door_fitness, _ = self.fitness_function(target_state)
         print('fitness with open doors curiosity', door_fitness, 'door ltl')
 
-    @staticmethod
-    def test_door_goal(self):
-        target_state = LTLReward([
-            {'door': True, 'goal': True},
-        ])
-        door_fitness, _ = fitness_function(target_state)
-        print('fitness step out fitness', door_fitness, 'ltl')
+    # @staticmethod
+    # def test_door_goal(self):
+    #     target_state = LTLReward([
+    #         {'door': True, 'goal': True},
+    #     ])
+    #     door_fitness, _ = fitness_function(target_state)
+    #     print('fitness step out fitness', door_fitness, 'ltl')
 
 
 def main():
-    config.experiment_name = "LTL"
+    # config.experiment_name = f"LTL-{datetime.datetime.now().strftime('%y-%m-%d-%H-%M-%S')}"
+    config.experiment_name = f"LTL"
     config.env_name = "MiniGrid-DoorKey-5x5-v0"
     config.max_nr_options = 3
 

@@ -35,10 +35,10 @@ fitness_training_steps = None
 eval_test_restarts = 1  # 0
 
 option_discovery_steps = 10002
-option_eval_test_steps = 5003
+option_eval_test_steps = 10003
 
 option_eval_training_steps = 20002
-option_train_steps = 50005 // 10
+option_train_steps = 40005
 
 evolution_iters = 150004
 max_env_steps = 200
@@ -76,12 +76,12 @@ visualize_all = 0
 enjoy_surrogate_reward = visualize_all or 0
 enjoy_motivating_function = visualize_all or 0
 
-enjoy_master_learning = visualize_all or 1
-enjoy_option_learning = visualize_all or 1
+enjoy_master_learning = visualize_all or 0
+enjoy_option_learning = visualize_all or 0
 
 enjoy_learned_options = visualize_all or 0
 # enjoy_option = visualize_all or 0
-enjoy_test = visualize_all or 1
+enjoy_test = visualize_all or 0
 
 visualize_any = any((enjoy_surrogate_reward, enjoy_master_learning,
                      enjoy_option_learning, enjoy_learned_options,
@@ -100,7 +100,7 @@ class Minigrid:
 
 
 learn_epsilon = 0.1
-max_nr_options = 1
+max_nr_options = 1  # overwritten by mainLTL
 option_trigger_treshold = 1.0
 option_termination_treshold = option_trigger_treshold
 max_option_duration = 10
@@ -120,3 +120,7 @@ blurred_observations = True
 recalculate_fitness = True
 automatic_pickup = True
 exploration_bonus = False
+option_train_epochs = 1
+deliberation_cost = 0.0  # 0.2
+multiprocess = False
+TensorBoard = True  # slow

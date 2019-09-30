@@ -1340,7 +1340,7 @@ class MiniGridEnv(gym.Env):
             else:
                 av = ""
 
-            log = "\n".join(action_names[a] for a in reversed(self.action_history))
+            log = "\n".join(action_names[a] if a in action_names else str(a) for a in reversed(self.action_history))
             r.window.setText('\n'.join([repr(kwargs), av, log]))
 
         r.beginFrame()

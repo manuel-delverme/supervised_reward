@@ -5,10 +5,11 @@ import shared.utils
 
 
 class CachedPolicy:
-    def __init__(self, estimator, motivating_function):
+    def __init__(self, estimator, motivating_function, available_actions):
         self.estimator = estimator
         self.cache = {}
         self.motivating_function = motivating_function
+        self.available_actions = available_actions
 
     def __setitem__(self, obs_hash, value):
         obs_hash = shared.utils.hash_image(obs_hash)
@@ -31,10 +32,18 @@ class CachedPolicy:
         if reward >= config.option_termination_treshold:
             self.motivating_function.reset()
             return -1
-        return self._get(image)
+
+        action_idx = self._get(image)
+        active_policy = self.available_actions[action_idx]
+        while hasattr(active_policy, 'get_or_terminate'):
+            action_idx = active_policy.get_or_terminate(image, environment)
+            active_policy = self.available_actions[action_idx]
+
+        return action_idx
+
 
     def _get(self, image):
-        obs_hash = shared.utils.hash_image(image)
+        # obs_hash = shared.utils.hash_image(image)
         # if obs_hash not in self.cache:
         #     q_values = self.estimator.predict(image)
         #     action_idx = int(np.argmax(q_values))
@@ -42,8 +51,7 @@ class CachedPolicy:
 
         q_values = self.estimator.predict(image)
         action_idx = int(np.argmax(q_values))
-        # self.cache[obs_hash] = action_idx
-        # action_idx = self.cache[obs_hash]
+
         assert action_idx == int(np.argmax(self.estimator.predict(image)))
         return action_idx
 
