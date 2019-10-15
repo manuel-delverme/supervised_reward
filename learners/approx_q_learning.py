@@ -377,7 +377,6 @@ def learn(environment, *, options=(), epsilon=config.learn_epsilon, gamma=0.90, 
         old_state = new_state
 
     if eval_fitness:
-        # print('testing')
         with torch.no_grad():
             test_fitness = test(
                 environment=environment, estimator=estimator, eval_steps=config.option_eval_test_steps, render=False, is_option=is_option,
@@ -385,7 +384,6 @@ def learn(environment, *, options=(), epsilon=config.learn_epsilon, gamma=0.90, 
                 update_reward=lambda s, r, t: update_reward(environment, s, replace_reward, r, steps_since_last_restart, surrogate_reward, t, type_of_run,
                                                             available_actions[nr_primitive_actions:])
             )
-            # print('tested')
     else:
         test_fitness = None
 

@@ -31,22 +31,6 @@ class LTLSearch(Search):
             print(f"{r.reward_coords}")
         return population
 
-    def test_door(self):
-        target_state = LTLReward([
-            {'door': True, }
-        ])
-        door_fitness, _ = self.fitness_function(target_state)
-        print('fitness with open doors curiosity', door_fitness, 'door ltl')
-
-    # @staticmethod
-    # def test_door_goal(self):
-    #     target_state = LTLReward([
-    #         {'door': True, 'goal': True},
-    #     ])
-    #     door_fitness, _ = fitness_function(target_state)
-    #     print('fitness step out fitness', door_fitness, 'ltl')
-
-
 def main():
     # config.experiment_name = f"LTL-{datetime.datetime.now().strftime('%y-%m-%d-%H-%M-%S')}"
     config.experiment_name = f"LTL"
