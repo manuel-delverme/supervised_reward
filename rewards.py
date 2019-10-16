@@ -1,4 +1,5 @@
-from typing import Text, List, Dict
+import collections
+from typing import Text, List, Union, Tuple
 
 import numpy as np
 
@@ -74,19 +75,13 @@ class ConstrainedReward(Reward):
 
 
 class LTLReward:
-    def __init__(self, target_state: List[Dict[Text, bool]], reward_partials=True):
+    def __init__(self, target_state: List[Union[Tuple, Text]], reward_partials=True):
         assert isinstance(target_state, list)
-        assert isinstance(target_state[0], dict)
-        assert all(t for t in target_state)
-
-        if len(target_state) > 1:
-            raise NotImplementedError
-
         self.target_state = target_state
 
         self.fitness = None
         self.options = None
-        self.reward_partials = reward_partials
+        self.is_option = not reward_partials
         self.reset()
 
     @property
@@ -97,37 +92,39 @@ class LTLReward:
         return len(self.target_state) == self.ltl_progress
 
     def __repr__(self):
-        seq = []
-        for els in self.target_state:
-            step = []
-            for k in sorted(els.keys()):
-                if els[k]:
-                    step.append(k.upper())
+        step = []
+        for s in self.target_state:
+            str_k = s
+            if isinstance(s, (tuple, list)):
+                if s[2]:
+                    str_k = f"{s[0]} {s[1]}"
                 else:
-                    step.append(k)
-            step = str(step)
-            seq.append(step)
-        _repr = ' >> '.join(seq)
-        return f"reach {_repr}"
+                    str_k = f"{s[0]} ¬{s[1]}"
+            step.append(str_k)
+        return f"reach {step}"
 
-    def __call__(self, new_state, environment):
+    def __call__(self, new_state, environment, as_inhibition=False):
         self._update_state(environment)
 
-        if self.reward_partials:
-            reward = len(self.achieved_ltl_clauses) * config.option_trigger_treshold
-            if not reward:
-                reward = -0.01
+        print(f'reward: is_option {self.is_option}', self.achieved_ltl_clauses, self.target_state)
+        # reward = config.option_termination_treshold
+        # TODO: options used to reward {0, 1} now they need to do proper initibition so that the convergence criteria will bug out
+
+        reward = len(self.achieved_ltl_clauses)  # +1 for each node
+        if reward:
+            if self.is_option and not as_inhibition:
+                reward = config.option_trigger_treshold  # TODO: this could cause issues with the initibiotn
         else:
-            # TODO: multi step state, here i pick 0th element which is wrong
-            if len(self.achieved_ltl_clauses) == len(self.target_state[0]):
-                reward = config.option_termination_treshold
-            else:
-                reward = -0.01
+            reward = -0.01
+
         return float(reward)
 
     def _update_state(self, environment):
         grid = environment.env.grid
-        self.state['key'] = True  # key is in hand unless it's on the ground
+        state = {
+            'key': True  # key is in hand unless it's on the ground
+        }
+
         for idx, cell in enumerate(grid.grid):
             if cell is None:
                 continue
@@ -135,40 +132,99 @@ class LTLReward:
                 continue
 
             if cell.type == 'key':
-                self.state['key'] = False
+                state['key'] = False
             elif cell.type == 'door':
-                self.state['door'] = cell.is_open
+                state['door'] = cell.is_open
 
             elif cell.type == 'goal':
                 y, x = divmod(idx, environment.env.width)
-                self.state['goal'] = all(environment.env.agent_pos == (y, x))
+                state['goal'] = all(environment.env.agent_pos == (y, x))
             else:
                 raise Exception(cell)
         front_cell = environment.env.grid.get(*environment.env.front_pos)
-        self.state['front_door'] = front_cell is not None and front_cell.type == "door"
+        state['front_door'] = front_cell is not None and front_cell.type == "door"
 
-        active_formula = self.target_state[self.ltl_progress]
+        self.last_state = state
+        for preprosition, value in state.items():
+            self.state_history[preprosition].append(value)
 
-        if len(self.target_state) > 1:
-            raise NotImplementedError
+        new_ltl_clauses = set()
+        # don't get to the door until you get the key,
+        # ~FD until+K AND (OD and last+FD)
 
-        new_ltl_clauses = {k for k, v in active_formula.items() if self.state[k] == self.target_state[0][k]}
-        if not set(active_formula.keys()).difference(new_ltl_clauses):  # TODO: assuming only Trues
-            if len(self.target_state) > 1:
-                raise NotImplementedError
-            # self.ltl_progress += 1 TODO: disabled for now
-        self.achieved_ltl_clauses = new_ltl_clauses
+        achieved_subproblems = []
+        evaluation1 = []
+        for idx, step in enumerate(self.target_state):
+            if isinstance(step, (tuple, list)):
+                operator, preprosition, target_value = step
+                is_satisfied = False
+                is_true = self.last_state[preprosition] == target_value
+                was_always_true = all(v == target_value for v in self.state_history[preprosition])
+                has_been_true = any(v == target_value for v in self.state_history[preprosition])
+
+                if operator == "last":
+                    is_satisfied = is_true
+                elif operator == "global":
+                    is_satisfied = was_always_true
+                elif operator == "past":
+                    is_satisfied = has_been_true
+
+                evaluation1.append(is_satisfied)
+                if is_satisfied:
+                    achieved_subproblems.append(idx)
+            else:
+                evaluation1.append(step)
+
+        evaluation2 = []
+        for idx in range(1, len(evaluation1), 2):
+            step = evaluation1[idx - 1: idx + 2]
+
+            a, operator, b = step
+            is_satisfied = False
+
+            if operator == "until":  # not door until key
+                if not b:  # not key
+                    is_satisfied = a  # not door
+                else:
+                    is_satisfied = True  # not active TODO: continue here
+
+            elif operator == "and":
+                is_satisfied = a and b
+            elif operator == "or":
+                is_satisfied = a or b
+
+            if is_satisfied:
+                achieved_subproblems.append(idx)
+            evaluation2.append(is_satisfied)
+
+        self.achieved_ltl_clauses = achieved_subproblems
 
     def reset(self):
         self.ltl_progress = 0
-        self.state = {}
+        self.last_state = {}
+        self.state_history = collections.defaultdict(list)
         self.achieved_ltl_clauses = []
 
     def motivating_function(self, _):
-        # TODO: the values should be {True, False, Don't Care}, right now False means Don't Care
-        if len(self.target_state) > 1:
+        # motivating_trace = []
+        # for idx, target_state in enumerate(self.target_state):
+        #     if idx not in self.achieved_ltl_clauses:
+        #         if isistance(target_state, ) == 3:
+        #             operator, preprosition, target_value = target_state
+        #             target_state = operator, preprosition, None
+        #     motivating_trace.append(target_state)
+        motivating_trace = []
+        if len(self.achieved_ltl_clauses) > 3:
             raise NotImplementedError
-        target_state = {k: False for k in self.target_state[0]}
-        target_state.update({k: True for k in self.achieved_ltl_clauses})
 
-        return LTLReward([target_state, ], reward_partials=False)
+        for idx in self.achieved_ltl_clauses:
+            symbol = self.target_state[idx]
+            motivating_trace.append(symbol)
+
+            if isinstance(symbol, str):
+                if symbol == 'until':
+                    if (idx + 1) not in self.achieved_ltl_clauses:
+                        # it's important as a form but not as an independent symbol
+                        motivating_trace.append(self.target_state[idx + 1])
+
+        return LTLReward(motivating_trace, reward_partials=False)

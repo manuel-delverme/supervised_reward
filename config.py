@@ -73,15 +73,15 @@ shape_reward = False
 compact_observation = False
 
 visualize_all = 0
-enjoy_surrogate_reward = visualize_all or 0
-enjoy_motivating_function = visualize_all or 0
+enjoy_surrogate_reward = visualize_all or 1
+enjoy_motivating_function = visualize_all or 1
 
-enjoy_master_learning = visualize_all or 0
-enjoy_option_learning = visualize_all or 0
+enjoy_master_learning = visualize_all or 1
+enjoy_option_learning = visualize_all or 1
 
-enjoy_learned_options = visualize_all or 0
+enjoy_learned_options = visualize_all or 1
 # enjoy_option = visualize_all or 0
-enjoy_test = visualize_all or 0
+enjoy_test = visualize_all or 1
 
 visualize_any = any((enjoy_surrogate_reward, enjoy_master_learning,
                      enjoy_option_learning, enjoy_learned_options,
@@ -124,3 +124,4 @@ option_train_epochs = 1
 deliberation_cost = 0.0  # 0.2
 multiprocess = False
 TensorBoard = True  # slow
+PlanningExam = True

@@ -309,7 +309,7 @@ def learn(environment, *, options=(), epsilon=config.learn_epsilon, gamma=0.90, 
                                              available_actions[nr_primitive_actions:])
             reward_improvement = 0
             if highest_reward is None:
-                highest_reward = reward
+                highest_reward = 0.0
 
             if reward > highest_reward:
                 reward_improvement = reward - highest_reward
@@ -420,7 +420,7 @@ def update_reward(environment, new_state, replace_reward, reward, steps_since_la
         reward = surrogate_reward(new_state, environment)
         if type_of_run in ('discovery', 'visualization'):
             for option in inibited_rewards:
-                inibition = option.motivating_function(new_state, environment)
+                inibition = option.motivating_function(new_state, environment, as_inhibition=True)
                 reward -= inibition
 
     if type_of_run == 'option' and (steps_since_last_restart > config.max_train_option_steps or reward >= config.option_termination_treshold):

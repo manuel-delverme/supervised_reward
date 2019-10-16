@@ -1,23 +1,17 @@
 # import hashlib
 import functools
+import gzip
+import hashlib
 import os
 import pickle
-import numpy as np
-import sys
-import os
-import hashlib
-import gzip
-
-import config
 
 
 def disk_cache(function):
     def wrapper(*args, **kwargs):
         fid = function.__name__
 
-
         if fid == "learn_option":
-           del kwargs['option_nr']
+            del kwargs['option_nr']
 
         cache_file = "cache/{}".format(fid)
         if args:
@@ -74,4 +68,5 @@ def disk_cache(function):
             with storage_fn(cache_file, "wb") as fout:
                 pickle.dump(retr, fout)
         return retr
+
     return wrapper

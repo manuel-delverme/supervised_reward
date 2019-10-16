@@ -125,7 +125,7 @@ def enjoy_surrogate_reward(environment, surrogate_reward, inibited_rewards=(), t
         environment.render(observation=new_state)
         if terminal:
             environment.reset()
-        surrogate_reward.reset()
+            surrogate_reward.reset()
 
         if surrogate_reward.ltl_progress == len(surrogate_reward.target_state):
             surrogate_reward.reset()
