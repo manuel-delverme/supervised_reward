@@ -35,10 +35,9 @@ class LinearRegressionModel(nn.Module):
         # self.preprocc = nn.Conv2d(in_channels=4, out_channels=1, kernel_size=1, stride=1, padding=1)
         self.regressor = nn.Sequential(
             # nn.Linear(nr_inputs, 1, bias=True),
-            nn.Linear(nr_inputs, 1, bias=True),
-            # nn.Linear(nr_inputs, 1, bias=True),
-            # nn.ReLU(),
-            # nn.Linear(128, 1),
+            nn.Linear(nr_inputs, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1),
         )
         for p in self.regressor.parameters():
             p.data *= 0.01
@@ -187,32 +186,23 @@ def pick_action(observation, old_action_idx, old_primitive_action, is_option, en
             action_value = q_values
         else:
             # explore
-            action_idx = random_sample(available_actions, is_option, observation, environment)
+            action_idx = random.randint(0, len(available_actions) - 1)
             action_value = [-1]
 
-        if is_option(action_idx):
-            primitive_action_idx = available_actions[action_idx].get_or_terminate(observation, environment)
-            if primitive_action_idx == shared.constants.TERMINATE_OPTION:
-                action_idx = random_sample(available_actions, is_option, observation, environment)
-                if is_option(action_idx):
-                    primitive_action_idx = available_actions[action_idx].get_or_terminate(observation, environment)
-                else:
-                    primitive_action_idx = action_idx
-                action_value = [-1]
-
-        else:
-            primitive_action_idx = action_idx
+    if is_option(action_idx):  # resolve hierarchy
+        primitive_action_idx = available_actions[action_idx].get_or_terminate(observation, environment)
+        while primitive_action_idx == shared.constants.TERMINATE_OPTION:
+            action_idx = random.randint(0, len(available_actions) - 1)
+            if is_option(action_idx):
+                primitive_action_idx = available_actions[action_idx].get_or_terminate(observation, environment)
+            else:
+                primitive_action_idx = action_idx
+            action_value = [-1]
+    else:
+        primitive_action_idx = action_idx
 
     assert isinstance(primitive_action_idx, int) and not is_option(primitive_action_idx)
     return action_idx, primitive_action_idx, action_value
-
-
-def random_sample(available_actions, is_option, observation, environment):
-    action_idx = random.randint(0, len(available_actions) - 1)
-    while is_option(action_idx) and available_actions[action_idx].get_or_terminate(observation, environment) == shared.constants.TERMINATE_OPTION:
-        action_idx = random.randint(0, len(available_actions) - 1)
-    return action_idx
-
 
 def td_update(estimator, state, action_idx, reward, future_reward, logger):
     # q(s,a) = q(s,a) + alpha * [ R + gamma * max(Q(s',a)-Q(s,a)]
@@ -305,8 +295,7 @@ def learn(environment, *, options=(), epsilon=config.learn_epsilon, gamma=0.90, 
             new_state, reward, terminal, info = environment.step(available_actions[primitive_action])
 
             cumulative_real_reward = update_non_surrogate_metrics(cumulative_real_reward, fitness, logger, option_nr, reward, step)
-            reward, terminal = update_reward(environment, new_state, replace_reward, reward, steps_since_last_restart, surrogate_reward, terminal, type_of_run,
-                                             available_actions[nr_primitive_actions:])
+            reward, terminal = update_reward(environment, new_state, replace_reward, reward, steps_since_last_restart, surrogate_reward, terminal, type_of_run)
             reward_improvement = 0
             if highest_reward is None:
                 highest_reward = 0.0
@@ -324,8 +313,8 @@ def learn(environment, *, options=(), epsilon=config.learn_epsilon, gamma=0.90, 
 
             maybe_render_train(action_idx, action_value, available_actions, environment, reward, step, terminal, training_steps, type_of_run, new_state)
 
-            opt, available_actions, estimator, highest_reward = generate_new_option(estimator, available_actions, generate_options, learned_options, new_state, reward_improvement,
-                                                                                    surrogate_reward, highest_reward, nr_primitive_actions)
+            opt, available_actions, estimator, highest_reward, surrogate_reward = generate_new_option(
+                estimator, available_actions, generate_options, learned_options, new_state, reward_improvement, surrogate_reward, highest_reward, nr_primitive_actions)
 
             if len(available_actions[nr_primitive_actions:]) >= config.max_nr_options and not eval_fitness:
                 return available_actions[nr_primitive_actions:], cumulative_reward, None, estimator
@@ -381,8 +370,7 @@ def learn(environment, *, options=(), epsilon=config.learn_epsilon, gamma=0.90, 
             test_fitness = test(
                 environment=environment, estimator=estimator, eval_steps=config.option_eval_test_steps, render=False, is_option=is_option,
                 available_actions=available_actions[:nr_usable_actions],
-                update_reward=lambda s, r, t: update_reward(environment, s, replace_reward, r, steps_since_last_restart, surrogate_reward, t, type_of_run,
-                                                            available_actions[nr_primitive_actions:])
+                update_reward=lambda s, r, t: update_reward(environment, s, replace_reward, r, steps_since_last_restart, surrogate_reward, t, type_of_run)
             )
     else:
         test_fitness = None
@@ -414,14 +402,10 @@ def reset(available_actions, environment, nr_primitive_actions, surrogate_reward
 seen_states = {}
 
 
-def update_reward(environment, new_state, replace_reward, reward, steps_since_last_restart, surrogate_reward, terminal, type_of_run, inibited_rewards):
+def update_reward(environment, new_state, replace_reward, reward, steps_since_last_restart, surrogate_reward, terminal, type_of_run):
     assert replace_reward
     if surrogate_reward is not None:
         reward = surrogate_reward(new_state, environment)
-        if type_of_run in ('discovery', 'visualization'):
-            for option in inibited_rewards:
-                inibition = option.motivating_function(new_state, environment, as_inhibition=True)
-                reward -= inibition
 
     if type_of_run == 'option' and (steps_since_last_restart > config.max_train_option_steps or reward >= config.option_termination_treshold):
         terminal = True
@@ -447,21 +431,22 @@ def generate_new_option(estimator, available_actions, generate_options, learned_
     new_option = False
 
     if generate_options and reward >= config.option_trigger_treshold:
-        motivating_function = surrogate_reward.motivating_function(state)
+        motivating_function = surrogate_reward.motivating_function(state, available_actions)
         option_hash = hash_option(motivating_function)
 
         if option_hash not in learned_options:
-            print("\ndiscovered new option", motivating_function, 'of', surrogate_reward, '\n')
+            print("================\ndiscovered new option", motivating_function, 'of', surrogate_reward, '\n================')
             new_option = learn_option(motivating_function, available_actions, nr_primitive_actions, option_nr=len(learned_options))
 
             learned_options.add(option_hash)
             available_actions.append(copy.deepcopy(new_option))
             estimator.add_new_action()
+            surrogate_reward.add_new_action(new_option)
             print("\nenjoy the new discovery reward")
             maybe_enjoy_surrogate(config.environment(), surrogate_reward, "discovery", available_actions[nr_primitive_actions:])
 
         highest_reward = 0
-    return new_option, available_actions, estimator, highest_reward
+    return new_option, available_actions, estimator, highest_reward, surrogate_reward
 
 
 def maybe_render_train(action_idx, action_value, available_actions, environment, reward, step, terminal, training_steps, type_of_run, new_state):
@@ -566,7 +551,7 @@ def test(environment, eval_steps, *, estimator=None, render=False, is_option=Non
             old_state, environment=environment, available_actions=available_actions, old_primitive_action=primitive_action_idx, old_action_idx=action_idx, is_option=is_option,
             estimator=estimator)
 
-        if primitive_action_idx == -1:
+        if primitive_action_idx is None:
             continue
 
         new_state, reward, terminal, info = environment.step(available_actions[primitive_action_idx])
@@ -611,5 +596,5 @@ def learn_option(option_reward, available_actions, nr_primitive_actions, *, opti
 
             mdp.render()
             mdp.render()
-            shared.utils.enjoy_policy(mdp, option, available_actions, option_reward)
+            shared.utils.enjoy_policy(mdp, option, available_actions, option_reward, type_of_run="option")
     return option

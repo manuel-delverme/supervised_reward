@@ -2,6 +2,7 @@ from collections import namedtuple
 
 import config
 import shared.utils
+import shared.constants
 
 
 class CachedPolicy:
@@ -31,14 +32,16 @@ class CachedPolicy:
         # print(reward, self.motivating_function.ltl_progress)
         if reward >= config.option_termination_treshold:
             self.motivating_function.reset()
-            return -1
+            return shared.constants.TERMINATE_OPTION
 
         action_idx = self._get(image)
         active_policy = self.available_actions[action_idx]
         while hasattr(active_policy, 'get_or_terminate'):
             action_idx = active_policy.get_or_terminate(image, environment)
-            active_policy = self.available_actions[action_idx]
-
+            if action_idx == shared.constants.TERMINATE_OPTION:
+                active_policy = None
+            else:
+                active_policy = self.available_actions[action_idx]
         return action_idx
 
 

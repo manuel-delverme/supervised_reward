@@ -7,6 +7,8 @@ import numpy as np
 import config
 import shared.constants as C
 
+OBJECT_TO_ID = gym_minigrid.minigrid.OBJECT_TO_IDX
+
 
 class MiniGrid(gym.Env):
     def __init__(self):
@@ -21,7 +23,7 @@ class MiniGrid(gym.Env):
     def encode_observation(self, obs):
         image = obs['image'][:, :, 0]
 
-        doors = image == 4  # door
+        doors = image == OBJECT_TO_ID['door']
         opens = np.logical_not(obs['image'][:, :, 2])  # door
 
         info_map = np.zeros(shape=(config.Minigrid.nr_layers, *obs['image'].shape[:-1]))
@@ -31,7 +33,7 @@ class MiniGrid(gym.Env):
 
         # wall and unseen are walls; where you can not go
         # info_map[C.UNWALKABLE_LAYER, :, :] = np.logical_or(image == 2, image == 0)
-        info_map[C.UNWALKABLE_LAYER, :, :] = image == 2
+        info_map[C.UNWALKABLE_LAYER, :, :] = image == OBJECT_TO_ID['wall']
 
         # # info_map[:, :, 0] = np.logical_or(info_map[:, :, 0], image[:, :, 0] == 3)
         # # you can go in open doors
@@ -42,7 +44,12 @@ class MiniGrid(gym.Env):
         # you can interact with closed doors
         info_map[C.DOOR_LAYER, :, :] = np.logical_and(doors, np.logical_not(opens))
         # goal positions
-        info_map[C.FOOD_LAYER, :, :] = image == 8
+        info_map[C.FOOD_LAYER, :, :] = image == OBJECT_TO_ID['goal']
+
+        if self.env.carrying is not None and self.env.carrying.type == 'key':
+            info_map[C.KEY_LAYER, :, :].fill(1)
+        else:
+            info_map[C.KEY_LAYER, :, :] = image == OBJECT_TO_ID['key']
 
         for layer in range(info_map.shape[0]):
             info_map[layer] = np.flip(np.rot90(info_map[layer, :, :], 3), 1)

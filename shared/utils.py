@@ -1,4 +1,5 @@
 import random
+import shared.constants
 import time
 
 import numpy as np
@@ -23,7 +24,7 @@ def eval_options(env, options):
 def print_statistics(fitness, options):
     option_names = []
     for option in options:
-        option_names.append(int(np.argwhere(option == -1)[0]))
+        option_names.append(int(np.argwhere(option == shared.constants.TERMINATE_OPTION)[0]))
     option_names = " ".join(str(n) for n in sorted(option_names))
     print("score:\t{}\toptions: {}\t{}".format(fitness, len(options), option_names))
 
@@ -42,7 +43,7 @@ def plot_intinsic_motivation(motivating_function, old_state, step):
         config.tensorboard.add_figure(f'motivating_functions/{layer}', figure, global_step=step, close=True)
 
 
-def enjoy_policy(environment, policy, available_actions, reward_function=False):
+def enjoy_policy(environment, policy, available_actions, reward_function=False, type_of_run=None):
     forced_action = None
     environment.render()
     environment.render()
@@ -59,7 +60,11 @@ def enjoy_policy(environment, policy, available_actions, reward_function=False):
         active_policy = policy
         while hasattr(active_policy, 'get_or_terminate'):
             action_idx = active_policy.get_or_terminate(obs, environment)
-            active_policy = available_actions[action_idx]
+            if action_idx is not None:
+                active_policy = available_actions[action_idx]
+            else:
+                active_policy = None
+                break
 
         if forced_action is not None:
             action_idx = forced_action
@@ -67,18 +72,23 @@ def enjoy_policy(environment, policy, available_actions, reward_function=False):
         else:
             action_idx = active_policy
 
-        while action_idx == -1:
+        while action_idx == shared.constants.TERMINATE_OPTION:
             obs = environment.reset()
-            policy.reward_function.reset()
+            policy.motivating_function.reset()
 
             time.sleep(1)
             action_idx = policy.get_or_terminate(obs, environment)
-            print('a', action_idx, 'r', policy.reward_function)
+            print('a', action_idx, 'r', policy.motivating_function(obs, environment))
+            if action_idx == shared.constants.TERMINATE_OPTION:
+                print('degenerate policy, terminates on reset')
+                return
 
-        obs, reward, terminal, info = environment.step(action_idx)
+        obs, env_reward, terminal, info = environment.step(action_idx)
 
         if reward_function:
-            reward = reward_function(obs, environment)
+            # reward = reward_function(obs, environment)
+            from learners.approx_q_learning import update_reward
+            reward, terminal = update_reward(environment, obs, replace_reward=True, reward=env_reward, steps_since_last_restart=-1, terminal=terminal, surrogate_reward=reward_function, type_of_run=type_of_run)
             print('reward:', reward)
             if reward == config.option_termination_treshold:
                 print('forcing terminal')
@@ -86,7 +96,7 @@ def enjoy_policy(environment, policy, available_actions, reward_function=False):
                 policy.motivating_function.reset()
 
         environment.render(observation=obs)
-        cmd = input('q_to_exit, t to terminate')
+        cmd = input('q to exit, t to terminate')
         if cmd == 'q':
             break
         elif cmd == 't' or terminal:
@@ -118,7 +128,7 @@ def enjoy_surrogate_reward(environment, surrogate_reward, inibited_rewards=(), t
 
         new_state, env_reward, terminal, info = environment.step(action)
         reward, terminal = update_reward(environment, new_state, replace_reward=True, reward=env_reward, steps_since_last_restart=-1, terminal=terminal,
-                                         surrogate_reward=surrogate_reward, type_of_run=type_of_run, inibited_rewards=inibited_rewards)
+                                         surrogate_reward=surrogate_reward, type_of_run=type_of_run)
 
         with np.printoptions(precision=3, suppress=True):
             print('updated reward from env', reward, 'real reward', env_reward, 'terminal', terminal)
