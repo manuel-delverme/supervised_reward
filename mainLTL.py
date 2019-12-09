@@ -43,7 +43,9 @@ class LTLSearch(Search):
         trace = [
             ('key', True),
             'and',
-            ('door', True),
+            ('front_door', True),
+            # 'and',
+            # ('door', True),
         ]
         reward = LTLReward(trace)
         return reward

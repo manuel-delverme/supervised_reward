@@ -12,9 +12,9 @@ import envs.minigrid
 
 environment = envs.minigrid.MiniGrid
 # env_name = 'MiniGrid-MultiRoom-N2-S1-v0'
-# env_name = "MiniGrid-DoorKey-5x5-v0"
+env_name = "MiniGrid-DoorKey-5x5-v0"
 # env_name = "MiniGrid-DoorKey-6x6-v0"
-env_name = "MiniGrid-DoorKey-8x8-v0"
+# env_name = "MiniGrid-DoorKey-8x8-v0"
 # env_name = "MiniGrid-DoorKey-16x16-v0"
 # env_name = 'MiniGrid-MultiRoom-N2-S4-v0'
 
@@ -42,13 +42,14 @@ option_discovery_steps = 10002
 option_eval_test_steps = 10003
 
 option_eval_training_steps = 20002
-option_train_steps = 400005
+option_train_steps = 100005
 
 evolution_iters = 150004
 max_env_steps = 200
-max_train_option_steps = 50
+
 learning_rate = 1e-3
-max_option_duration = 10
+max_train_option_steps = 150
+max_option_duration = 50
 
 if 'S1' in env_name:
     print("DECIMATING TIMES BECAUSE S1")
@@ -91,9 +92,9 @@ enjoy_motivating_function = visualize_all or 0
 enjoy_master_learning = visualize_all or 0
 enjoy_option_learning = visualize_all or 0
 
-enjoy_learned_options = visualize_all or 1
+enjoy_learned_options = visualize_all or 0
 # enjoy_option = visualize_all or 0
-enjoy_test = visualize_all or 1
+enjoy_test = visualize_all or 0
 
 visualize_any = any((enjoy_surrogate_reward, enjoy_master_learning,
                      enjoy_option_learning, enjoy_learned_options,
@@ -132,8 +133,8 @@ recalculate_fitness = True
 automatic_pickup = True
 exploration_bonus = False
 option_train_epochs = 1
-deliberation_cost = 0.0  # 0.2
+deliberation_cost = 0.0
 multiprocess = False
 TensorBoard = True  # slow
-PlanningExam = True
 NO_CACHE_ON_DEBUG = True
+HACK = False

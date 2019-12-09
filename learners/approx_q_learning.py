@@ -39,14 +39,21 @@ class LinearRegressionModel(nn.Module):
             nn.ReLU(),
             nn.Linear(128, 1),
         )
+        self.regressor_key = nn.Sequential(
+            # nn.Linear(nr_inputs, 1, bias=True),
+            nn.Linear(nr_inputs, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1),
+        )
         for p in self.regressor.parameters():
             p.data *= 0.01
 
     def forward(self, x):
         h = x.flatten(start_dim=1)
-        # h = self.preprocc(x)
-        # h = h.flatten(start_dim=1)
-        y_pred = self.regressor(h)
+        if x[:, -1, :, :].min() == 1:
+            y_pred = self.regressor_key(h)
+        else:
+            y_pred = self.regressor(h)
         return y_pred
 
 
@@ -170,7 +177,7 @@ def pick_action(observation, old_action_idx, old_primitive_action, is_option, en
         # keep following the option
         primitive_action_idx = available_actions[old_action_idx].get_or_terminate(observation, environment)
         action_idx = old_action_idx
-        action_value = [-1]
+        q_values = [-1]
     else:
         if exploit or epsilon < random.random():
             # greedy
@@ -182,27 +189,49 @@ def pick_action(observation, old_action_idx, old_primitive_action, is_option, en
             # best_action, second_best = np.argsort(q_values)[:2]
             # action_idx = int(best_action)
 
-            # action_value = q_values[action_idx]  # - q_values[second_best]
-            action_value = q_values
+            # q_values = q_values[action_idx]  # - q_values[second_best]
+            q_values = q_values
         else:
             # explore
             action_idx = random.randint(0, len(available_actions) - 1)
-            action_value = [-1]
+            q_values = [-1]
 
     if is_option(action_idx):  # resolve hierarchy
-        primitive_action_idx = available_actions[action_idx].get_or_terminate(observation, environment)
-        while primitive_action_idx == shared.constants.TERMINATE_OPTION:
-            action_idx = random.randint(0, len(available_actions) - 1)
-            if is_option(action_idx):
-                primitive_action_idx = available_actions[action_idx].get_or_terminate(observation, environment)
-            else:
-                primitive_action_idx = action_idx
-            action_value = [-1]
+        action_idx, q_values, primitive_action_idx = resolve_option_hierarchy(
+            action_idx,
+            q_values,
+            available_actions,
+            environment,
+            is_option,
+            observation,)
     else:
         primitive_action_idx = action_idx
 
     assert isinstance(primitive_action_idx, int) and not is_option(primitive_action_idx)
-    return action_idx, primitive_action_idx, action_value
+    return action_idx, primitive_action_idx, q_values
+
+
+def resolve_option_hierarchy(option_idx, q_values, available_actions, environment, is_option, observation):
+    if not is_option(option_idx):
+        raise ValueError
+
+    primitive_action_idx = available_actions[option_idx].get_or_terminate(observation, environment)
+    if primitive_action_idx == shared.constants.TERMINATE_OPTION:
+        if q_values is None:
+            raise ValueError
+
+        if isinstance(q_values, list) and q_values == [-1]:
+            primitive_action_idx = random.randint(0, len(available_actions) - 1)
+        else:
+            q_values = q_values.copy()
+            q_values[option_idx] = q_values.min() - 1
+            primitive_action_idx = int(np.argmax(q_values[option_idx]))
+
+        if is_option(primitive_action_idx):
+            option_idx, q_values, primitive_action_idx = resolve_option_hierarchy(primitive_action_idx, q_values, available_actions, environment, is_option, observation)
+
+    return option_idx, q_values, primitive_action_idx
+
 
 def td_update(estimator, state, action_idx, reward, future_reward, logger):
     # q(s,a) = q(s,a) + alpha * [ R + gamma * max(Q(s',a)-Q(s,a)]
@@ -278,11 +307,11 @@ def learn(environment, *, options=(), epsilon=config.learn_epsilon, gamma=0.90, 
     old_convergence = 0
 
     for step in tqdm.tqdm(range(training_steps), desc=desc, disable=config.disable_tqdm, position=position):
-        action_idx, primitive_action, action_value = pick_action(
+        action_idx, primitive_action, q_values = pick_action(
             observation=old_state, old_action_idx=action_idx, epsilon=epsilon, available_actions=available_actions, estimator=estimator,
             old_primitive_action=primitive_action, is_option=is_option, environment=environment, time_steps_under_option=time_steps_under_option)
 
-        logger.add_scalar(f'learning{option_nr}/action_value', max(action_value), step)
+        logger.add_scalar(f'learning{option_nr}/q_values', max(q_values), step)
         steps_since_last_restart += 1
         option_begin_state = option_prestep(action_idx, is_option, logger, old_state, option_begin_state, option_nr, options, step)
 
@@ -311,8 +340,6 @@ def learn(environment, *, options=(), epsilon=config.learn_epsilon, gamma=0.90, 
             cumulative_reward += reward
             rewards.append(reward)
 
-            maybe_render_train(action_idx, action_value, available_actions, environment, reward, step, terminal, training_steps, type_of_run, new_state)
-
             opt, available_actions, estimator, highest_reward, surrogate_reward = generate_new_option(
                 estimator, available_actions, generate_options, learned_options, new_state, reward_improvement, surrogate_reward, highest_reward, nr_primitive_actions)
 
@@ -328,7 +355,20 @@ def learn(environment, *, options=(), epsilon=config.learn_epsilon, gamma=0.90, 
             else:
                 discounted_future_value = gamma * estimator.predict(new_state).max()
 
+
+            if not reward:
+                reward = -0.01
+            else:
+                pass
+                # if type_of_run == 'option' and step > 5000:
+                #     config.HACK = True
+
+            # if sum(convergences) == convergences.maxlen - 1:
+            #     config.HACK = True
+
+            maybe_render_train(action_idx, q_values, available_actions, environment, reward, step, terminal, training_steps, type_of_run, new_state)
             loss = td_update(estimator, old_state, primitive_action, reward, discounted_future_value, logger)
+
             if loss is not None:
                 cum_loss += loss
                 logger.add_scalar(f'learning{option_nr}/cum_loss', cum_loss, step)
@@ -352,7 +392,7 @@ def learn(environment, *, options=(), epsilon=config.learn_epsilon, gamma=0.90, 
                 new_state, steps_since_last_restart = reset(available_actions, environment, nr_primitive_actions, surrogate_reward)
 
                 convergence = sum(max(r, 0) for r in rewards)
-                convergences.append(convergence)
+                convergences.append(min(1, convergence))
                 # logger.add_scalar(f'learning{option_nr}/delta_convergence', convergence - old_convergence, step)
                 logger.add_scalar(f'learning{option_nr}/convergence', convergence, step)
                 logger.add_scalar(f'learning{option_nr}/convergences', sum(convergences), step)
@@ -421,7 +461,7 @@ def update_reward(environment, new_state, replace_reward, reward, steps_since_la
         # Update the count for this key
         new_count = pre_count + 1
         seen_states[tup] = new_count
-        bonus = 1 / math.sqrt(new_count)
+        bonus = 0.1 / math.sqrt(new_count)
         reward += bonus
 
     return reward, terminal
@@ -453,7 +493,9 @@ def maybe_render_train(action_idx, action_value, available_actions, environment,
     if (
             type_of_run == 'eval' and config.enjoy_master_learning and step > (training_steps - 100)
     ) or (
-            type_of_run == 'option' and config.enjoy_option_learning and step > (training_steps - 50)
+            type_of_run == 'option' and config.enjoy_option_learning and step > (training_steps - 150)
+    ) or (
+            config.HACK
     ):
         # action_names = ('<', '>', 'foward', 'toggle', *range(len(available_actions) - 4))
         # action_value_ = []
@@ -592,8 +634,7 @@ def learn_option(option_reward, available_actions, nr_primitive_actions, *, opti
     if config.enjoy_learned_options:
         mdp = config.environment()
         with np.printoptions(precision=3, suppress=True):
-            print(f'learned option[{option_nr}] for GOAL:', option_reward, "enjoy policy")
-
+            print(f'\nlearned option[{option_nr}] for GOAL:', option_reward, "enjoy policy")
             mdp.render()
             mdp.render()
             shared.utils.enjoy_policy(mdp, option, available_actions, option_reward, type_of_run="option")

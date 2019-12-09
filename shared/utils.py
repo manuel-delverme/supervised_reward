@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 import config
 import learners.approx_q_learning
 import learners.approx_q_learning
+from learners import approx_q_learning
 
 
 def eval_options(env, options):
@@ -72,6 +73,7 @@ def enjoy_policy(environment, policy, available_actions, reward_function=False, 
         else:
             action_idx = active_policy
 
+        # approx_q_learning.resolve_option_hierarchy(action_idx, None, available_actions, environment, lambda x: hasattr(x, 'get_or_terminate'), obs)
         while action_idx == shared.constants.TERMINATE_OPTION:
             obs = environment.reset()
             policy.motivating_function.reset()
@@ -89,7 +91,7 @@ def enjoy_policy(environment, policy, available_actions, reward_function=False, 
             # reward = reward_function(obs, environment)
             from learners.approx_q_learning import update_reward
             reward, terminal = update_reward(environment, obs, replace_reward=True, reward=env_reward, steps_since_last_restart=-1, terminal=terminal, surrogate_reward=reward_function, type_of_run=type_of_run)
-            print('reward:', reward)
+            print(f'reward: {reward}, terminal {terminal}')
             if reward == config.option_termination_treshold:
                 print('forcing terminal')
                 terminal = True

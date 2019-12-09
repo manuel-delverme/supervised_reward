@@ -128,11 +128,10 @@ class LTLReward:
         # TODO: options used to reward {0, 1} now they need to do proper initibition so that the convergence criteria will bug out
 
         reward = len(self.achieved_ltl_clauses)  # +1 for each node
-        if not reward:
-            reward = -0.01
         inhibitions = 0.0
         for action in self.available_actions:
-            inhibitions += action.motivating_function(new_state, environment)
+            inhibition = action.motivating_function(new_state, environment)
+            inhibitions += inhibition
         reward -= inhibitions
 
         return float(reward)

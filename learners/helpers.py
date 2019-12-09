@@ -39,9 +39,13 @@ class CachedPolicy:
         while hasattr(active_policy, 'get_or_terminate'):
             action_idx = active_policy.get_or_terminate(image, environment)
             if action_idx == shared.constants.TERMINATE_OPTION:
-                active_policy = None
+                import warnings
+                warnings.warn("cheating on degenerate option")
+                active_policy = random.choice(self.available_actions)
             else:
                 active_policy = self.available_actions[action_idx]
+
+        action_idx = active_policy
         return action_idx
 
 
